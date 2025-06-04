@@ -1,4 +1,4 @@
-name: Daily Job Scraper
+name: Daily Job Scraper (Fixed)
 
 on:
   schedule:

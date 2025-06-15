@@ -6,10 +6,6 @@ import ssl
 from email.message import EmailMessage
 import os
 import re
-from datetime import datetime
-from playwright.async_api import async_playwright
-import os
-
 
 KEYWORDS = [
     "reptile", "amphibian", "herp", "turtle", "toad", "frog", "seal",
@@ -28,25 +24,16 @@ async def scrape_jobs():
 
         os.makedirs("screenshots", exist_ok=True)
         await page.screenshot(path="screenshots/page_initial.png", full_page=True)
-
-
-        # Take screenshot immediately after page loads
-        await page.screenshot(path="page_after_goto.png", full_page=True)
-        print("Screenshot saved: page_after_goto.png")
+        print("Screenshot saved: page_initial.png")
 
         try:
-            # Wait for the job listings to appear
             await page.wait_for_selector("li.search-result", timeout=15000)
         except Exception as e:
-            # If selector not found, save another screenshot for debugging
             print(f"Wait for selector failed: {e}")
-           await page.screenshot(path="screenshots/page_initial.png", full_page=True)
-            # ...
             await page.screenshot(path="screenshots/page_error.png", full_page=True)
-
-            print("Screenshot saved: page_wait_fail.png")
+            print("Screenshot saved: page_error.png")
             await browser.close()
-            raise e  # Or return empty list if you prefer to continue gracefully
+            raise e  # Or return [] if you'd rather not crash
 
         job_elements = await page.query_selector_all("li.search-result")
         print(f"Scanned {len(job_elements)} job postings")
@@ -72,9 +59,6 @@ async def scrape_jobs():
         await browser.close()
     return matching_jobs
 
-
-
-
 def send_email(subject, body):
     EMAIL_USER = os.getenv('EMAIL_USER')
     EMAIL_PASS = os.getenv('EMAIL_PASS')
@@ -96,12 +80,8 @@ if __name__ == "__main__":
     jobs = asyncio.run(scrape_jobs())
 
     if jobs:
-        job_text = "\n\n".join(jobs)
+        job_text = "\n\n".join(f"{j['title']}\n{j['preview']}\n{j['link']}" for j in jobs)
         send_email("🦎 Daily TAMU Wildlife Jobs", f"Found {len(jobs)} matching job(s):\n\n{job_text}")
     else:
         send_email("🦎 Daily TAMU Wildlife Jobs", "No matching jobs found today.")
 
-        send_email(
-            subject="🦎 Daily TAMU Wildlife Jobs",
-            body="No matching jobs found today."
-        )

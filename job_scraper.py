@@ -8,35 +8,16 @@ import os
 
 def scrape_jobs():
     url = "https://jobs.rwfm.tamu.edu/search/"
-    keywords = [
-        "reptile", "amphibian", "herp", "turtle", "toad", "frog", "seal", "island",
-        "whale", "cetacean", "tortoise", "spatial ecology", "predator", "tropical"
-    ]
+    keywords = ["reptile", "amphibian", "herp", "turtle", "toad", "frog",
+                "seal", "island", "whale", "cetacean", "tortoise",
+                "spatial ecology", "predator", "tropical"]
 
     response = requests.get(url)
     soup = BeautifulSoup(response.text, "html.parser")
-
     postings = soup.find_all("li", class_="search-result")
-    print(f"[{datetime.now()}] Scanned {len(postings)} job postings")
+    print(f"Scanned {len(postings)} listings")
 
     matches = []
-
-   for posting in postings:
-    title_tag = posting.find("a")
-    if not title_tag:
-        continue
-
-    title = title_tag.get_text(strip=True)
-    text = posting.get_text(separator=" ", strip=True).lower()
-    print("— JOB TEXT:", text[:200], "…")  # Print a preview of what we're scanning
-
-    for kw in keywords:
-        if kw in text:
-            link = title_tag["href"]
-            matches.append(f"{title}\n{link}")
-            break  # Stop after first match
-
-
 
     for posting in postings:
         title_tag = posting.find("a")
@@ -44,15 +25,16 @@ def scrape_jobs():
             continue
 
         title = title_tag.get_text(strip=True)
-        link = title_tag["href"]
-        summary = posting.get_text(separator=" ", strip=True).lower()
+        text = posting.get_text(separator=" ", strip=True).lower()
+        print("— JOB TEXT:", text[:200], "…")
 
         for kw in keywords:
-            if kw.lower() in summary:
+            if kw in text:
+                link = title_tag["href"]
                 matches.append(f"{title}\nLink: {link}")
-                break  # Stop checking more keywords if one matched
+                break
 
-    print(f"[{datetime.now()}] Found {len(matches)} matching jobs")
+    print(f"Matches found: {len(matches)}")
     return matches
 
 

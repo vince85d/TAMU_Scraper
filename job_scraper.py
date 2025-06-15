@@ -1,3 +1,31 @@
+import smtplib
+import ssl
+from email.message import EmailMessage
+import os
+
+def send_email(subject, body):
+    EMAIL_USER = os.getenv('EMAIL_USER')
+    EMAIL_PASS = os.getenv('EMAIL_PASS')
+    EMAIL_TO = os.getenv('EMAIL_TO')
+
+    print(f"DEBUG: Sending from {EMAIL_USER} to {EMAIL_TO}")
+    print(f"DEBUG: Password length = {len(EMAIL_PASS) if EMAIL_PASS else 'None'}")
+
+    msg = EmailMessage()
+    msg['From'] = EMAIL_USER
+    msg['To'] = EMAIL_TO
+    msg['Subject'] = subject
+    msg.set_content(body)
+
+    try:
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context) as server:
+            server.login(EMAIL_USER, EMAIL_PASS)
+            server.send_message(msg)
+        print(f"Email sent successfully to {EMAIL_TO}")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+        
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -46,6 +74,7 @@ if __name__ == "__main__":
         subject="Test Email from GitHub Actions",
         body="If you're reading this, the email system works!"
     )
+
 
 
 # Save scraped jobs as a CSV file

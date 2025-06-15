@@ -19,9 +19,10 @@ async def scrape_jobs():
         page = await browser.new_page()
         await page.goto(url)
         # Wait for job listings to load (wait for elements)
-        await page.wait_for_selector("li.search-result")
+        await page.wait_for_selector("div.search-result.job-result")
 
-        job_elements = await page.query_selector_all("li.search-result")
+
+        job_elements = await page.query_selector_all("div.search-result.job-result")
         print(f"[{datetime.now()}] Scanned {len(job_elements)} job postings")
 
         matches = []

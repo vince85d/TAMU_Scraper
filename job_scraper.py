@@ -7,26 +7,23 @@ from email.message import EmailMessage
 import os
 import re
 from datetime import datetime
+from playwright.async_api import async_playwright
+
+KEYWORDS = [
+    "reptile", "amphibian", "herp", "turtle", "toad", "frog", "seal",
+    "island", "whale", "cetacean", "tortoise", "spatial ecology",
+    "predator", "tropical"
+]
 
 async def scrape_jobs():
-    from playwright.async_api import async_playwright
-    import re
-    from datetime import datetime
-
-    KEYWORDS = [
-        "reptile", "amphibian", "herp", "turtle", "toad", "frog", "seal",
-        "island", "whale", "cetacean", "tortoise", "spatial ecology",
-        "predator", "tropical"
-    ]
-
     url = "https://jobs.rwfm.tamu.edu/search/"
     matching_jobs = []
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
-        await page.goto(url, wait_until="networkidle")
-        await page.wait_for_timeout(5000)
+        await page.goto(url)
+        await page.wait_for_selector("li.search-result", timeout=15000)
 
         job_elements = await page.query_selector_all("li.search-result")
         print(f"[{datetime.now()}] Scanned {len(job_elements)} job postings")
@@ -51,6 +48,7 @@ async def scrape_jobs():
 
         await browser.close()
     return matching_jobs
+
 
 
 

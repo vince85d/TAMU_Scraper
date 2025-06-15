@@ -21,13 +21,21 @@ def scrape_jobs():
 
     matches = []
 
-    for posting in postings:
-    title = posting.find("a").get_text(strip=True)
+   for posting in postings:
+    title_tag = posting.find("a")
+    if not title_tag:
+        continue
+
+    title = title_tag.get_text(strip=True)
     text = posting.get_text(separator=" ", strip=True).lower()
-    print("— JOB TEXT:", text[:200], "…")  # print first 200 characters for context
+    print("— JOB TEXT:", text[:200], "…")  # Print a preview of what we're scanning
+
     for kw in keywords:
         if kw in text:
-            ...  # existing logic
+            link = title_tag["href"]
+            matches.append(f"{title}\n{link}")
+            break  # Stop after first match
+
 
 
     for posting in postings:

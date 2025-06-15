@@ -5,42 +5,51 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 import os
+import re
+from datetime import datetime
 
 KEYWORDS = [
-    "reptile", "amphibian", "herp", "turtle", "toad", "frog",
-    "seal", "island", "whale", "cetacean", "tortoise",
-    "spatial ecology", "predator", "tropical"
+    "reptile", "amphibian", "herp", "turtle", "toad", "frog", "seal",
+    "island", "whale", "cetacean", "tortoise", "spatial ecology",
+    "predator", "tropical"
 ]
 
 async def scrape_jobs():
+    from playwright.async_api import async_playwright
+
     url = "https://jobs.rwfm.tamu.edu/search/"
+    matching_jobs = []
+
     async with async_playwright() as p:
-        browser = await p.chromium.launch()
+        browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         await page.goto(url, wait_until="networkidle")
-        await page.wait_for_timeout(5000)  # wait an extra 5 sec just to be safe
-
-
+        await page.wait_for_timeout(5000)
 
         job_elements = await page.query_selector_all("div.search-result.job-result")
         print(f"[{datetime.now()}] Scanned {len(job_elements)} job postings")
 
-        matches = []
+        for job in job_elements:
+            title_el = await job.query_selector("h2")
+            title = await title_el.inner_text() if title_el else "No Title"
 
-        for job_el in job_elements:
-            title_el = await job_el.query_selector("a")
-            title = (await title_el.inner_text()).strip() if title_el else ""
-            link = await title_el.get_attribute("href") if title_el else ""
-            text = (await job_el.inner_text()).lower()
+            preview_el = await job.query_selector("div.job-info")
+            preview = await preview_el.inner_text() if preview_el else ""
 
-            for kw in KEYWORDS:
-                if kw in text:
-                    matches.append(f"{title}\nLink: {link}")
-                    break
+            link_el = await job.query_selector("a.job-title")
+            link = await link_el.get_attribute("href") if link_el else ""
+
+            job_text = f"{title} {preview}".lower()
+            if any(re.search(rf"\b{kw}\b", job_text) for kw in KEYWORDS):
+                matching_jobs.append({
+                    "title": title.strip(),
+                    "preview": preview.strip(),
+                    "link": f"https://jobs.rwfm.tamu.edu{link.strip()}" if link else "N/A"
+                })
 
         await browser.close()
-        print(f"[{datetime.now()}] Found {len(matches)} matching jobs")
-        return matches
+    return matching_jobs
+
 
 def send_email(subject, body):
     EMAIL_USER = os.getenv('EMAIL_USER')

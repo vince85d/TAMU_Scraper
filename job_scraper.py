@@ -8,14 +8,16 @@ import os
 import re
 from datetime import datetime
 
-KEYWORDS = [
-    "reptile", "amphibian", "herp", "turtle", "toad", "frog", "seal",
-    "island", "whale", "cetacean", "tortoise", "spatial ecology",
-    "predator", "tropical"
-]
-
 async def scrape_jobs():
     from playwright.async_api import async_playwright
+    import re
+    from datetime import datetime
+
+    KEYWORDS = [
+        "reptile", "amphibian", "herp", "turtle", "toad", "frog", "seal",
+        "island", "whale", "cetacean", "tortoise", "spatial ecology",
+        "predator", "tropical"
+    ]
 
     url = "https://jobs.rwfm.tamu.edu/search/"
     matching_jobs = []
@@ -26,7 +28,7 @@ async def scrape_jobs():
         await page.goto(url, wait_until="networkidle")
         await page.wait_for_timeout(5000)
 
-        job_elements = await page.query_selector_all("div.search-result.job-result")
+        job_elements = await page.query_selector_all("li.search-result")
         print(f"[{datetime.now()}] Scanned {len(job_elements)} job postings")
 
         for job in job_elements:
@@ -36,7 +38,7 @@ async def scrape_jobs():
             preview_el = await job.query_selector("div.job-info")
             preview = await preview_el.inner_text() if preview_el else ""
 
-            link_el = await job.query_selector("a.job-title")
+            link_el = await job.query_selector("a")
             link = await link_el.get_attribute("href") if link_el else ""
 
             job_text = f"{title} {preview}".lower()
@@ -49,6 +51,7 @@ async def scrape_jobs():
 
         await browser.close()
     return matching_jobs
+
 
 
 def send_email(subject, body):

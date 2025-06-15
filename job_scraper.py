@@ -10,9 +10,6 @@ from datetime import datetime
 from playwright.async_api import async_playwright
 import os
 
-os.makedirs("screenshots", exist_ok=True)
-    await page.screenshot(path="screenshots/page_initial.png", full_page=True)
-
 
 KEYWORDS = [
     "reptile", "amphibian", "herp", "turtle", "toad", "frog", "seal",
@@ -28,6 +25,10 @@ async def scrape_jobs():
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         await page.goto(url)
+
+        os.makedirs("screenshots", exist_ok=True)
+        await page.screenshot(path="screenshots/page_initial.png", full_page=True)
+
 
         # Take screenshot immediately after page loads
         await page.screenshot(path="page_after_goto.png", full_page=True)

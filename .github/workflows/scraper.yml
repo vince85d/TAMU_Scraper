@@ -40,14 +40,14 @@ jobs:
 
       - name: Run job scraper
         run: python job_scraper.py
+        continue-on-error: true  # <- don't stop the workflow if this fails
 
-      - name: Upload screenshots as artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload screenshots
+        if: always()  # <- always upload, even if previous step failed
+        uses: actions/upload-artifact@4
         with:
-          name: job-scraper-screenshots
-          path: |
-            screenshots/page_initial.png
-            screenshots/page_error.png
+          name: debug-screenshots
+          path: screenshots/
 
 
 

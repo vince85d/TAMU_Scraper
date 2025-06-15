@@ -30,6 +30,12 @@ jobs:
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
         run: python job_scraper.py
+        
+      - name: Upload debug screenshot
+        uses: actions/upload-artifact@v4
+        with:
+            name: page-debug-screenshot
+            path: page_debug.png
 
 
 

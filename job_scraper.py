@@ -23,6 +23,8 @@ async def scrape_jobs():
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         await page.goto(url)
+        await page.screenshot(path="page_debug.png", full_page=True)
+
         await page.wait_for_selector("li.search-result", timeout=15000)
 
         job_elements = await page.query_selector_all("li.search-result")

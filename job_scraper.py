@@ -23,12 +23,24 @@ async def scrape_jobs():
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         await page.goto(url)
-        await page.screenshot(path="page_debug.png", full_page=True)
 
-        await page.wait_for_selector("li.search-result", timeout=15000)
+        # Take screenshot immediately after page loads
+        await page.screenshot(path="page_after_goto.png", full_page=True)
+        print("Screenshot saved: page_after_goto.png")
+
+        try:
+            # Wait for the job listings to appear
+            await page.wait_for_selector("li.search-result", timeout=15000)
+        except Exception as e:
+            # If selector not found, save another screenshot for debugging
+            print(f"Wait for selector failed: {e}")
+            await page.screenshot(path="page_wait_fail.png", full_page=True)
+            print("Screenshot saved: page_wait_fail.png")
+            await browser.close()
+            raise e  # Or return empty list if you prefer to continue gracefully
 
         job_elements = await page.query_selector_all("li.search-result")
-        print(f"[{datetime.now()}] Scanned {len(job_elements)} job postings")
+        print(f"Scanned {len(job_elements)} job postings")
 
         for job in job_elements:
             title_el = await job.query_selector("h2")

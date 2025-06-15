@@ -1,31 +1,35 @@
-name: Daily Job Scraper (Fixed)
+name: TAMU Job Scraper
 
 on:
   schedule:
-    - cron: '0 18 * * *'  # Every day at 6 PM UTC
-  workflow_dispatch:
+    - cron: '0 18 * * *'  # every day at 18:00 UTC (adjust as needed)
+  workflow_dispatch:     # manual trigger
 
 jobs:
-  run-scraper:
-    runs-on: ubuntu-22.04
+  scrape:
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repo
+      - name: Checkout repo
         uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"  # Make sure this is a string, not number
+          python-version: '3.10'
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4 pandas
+          python -m pip install --upgrade pip
+          pip install playwright
+          playwright install
 
-      - name: Run Job Scraper
-        run: python job_scraper.py
+      - name: Run scraper
         env:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python job_scraper.py
+
+
 

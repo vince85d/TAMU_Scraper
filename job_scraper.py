@@ -70,10 +70,21 @@ def scrape_jobs():
                 "link": link
             })
 if __name__ == "__main__":
-    send_email(
-        subject="Test Email from GitHub Actions",
-        body="If you're reading this, the email system works!"
-    )
+    # Run your scraper function
+    job_listings = scrape_jobs()
+
+    if job_listings:
+        job_text = "\n\n".join(job_listings)
+        send_email(
+            subject="🦎 Daily TAMU Wildlife Jobs",
+            body=f"Found {len(job_listings)} job(s):\n\n{job_text}"
+        )
+    else:
+        send_email(
+            subject="🦎 Daily TAMU Wildlife Jobs",
+            body="No matching jobs found today."
+        )
+
 
 
 

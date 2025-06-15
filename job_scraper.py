@@ -41,8 +41,12 @@ def scrape_jobs():
                 "deadline": deadline,
                 "link": link
             })
+if __name__ == "__main__":
+    send_email(
+        subject="Test Email from GitHub Actions",
+        body="If you're reading this, the email system works!"
+    )
 
-    return jobs
 
 # Save scraped jobs as a CSV file
 def save_jobs(jobs, filename):

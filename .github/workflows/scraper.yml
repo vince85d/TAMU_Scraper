@@ -36,6 +36,18 @@ jobs:
         with:
             name: page-debug-screenshot
             path: page_debug.png
+# Example snippet to add in your workflow YAML file
+
+      - name: Run job scraper
+        run: python job_scraper.py
+
+      - name: Upload screenshots as artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: job-scraper-screenshots
+          path: |
+            screenshots/page_initial.png
+            screenshots/page_error.png
 
 
 

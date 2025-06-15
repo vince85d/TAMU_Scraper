@@ -22,12 +22,15 @@ async def scrape_jobs():
         page = await browser.new_page()
         await page.goto(url)
 
+        print(await page.content())
+
+
         os.makedirs("screenshots", exist_ok=True)
         await page.screenshot(path="screenshots/page_initial.png", full_page=True)
         print("Screenshot saved: page_initial.png")
 
         try:
-            await page.wait_for_selector("div.search-result.jobbox", timeout=30000)
+            await page.wait_for_selector("div.job-listing", timeout=30000)
             job_elements = await page.query_selector_all("div.search-result.jobbox")
         except Exception as e:
             print(f"Wait for selector failed: {e}")

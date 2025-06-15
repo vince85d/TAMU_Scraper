@@ -44,7 +44,7 @@ jobs:
 
       - name: Upload screenshots
         if: always()  # <- always upload, even if previous step failed
-        uses: actions/upload-artifact@4
+        uses: actions/upload-artifact@v4.3.1
         with:
           name: debug-screenshots
           path: screenshots/

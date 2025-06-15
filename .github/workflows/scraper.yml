@@ -28,3 +28,10 @@ jobs:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
+
+          if __name__ == "__main__":
+    send_email(
+        subject="Test Email from GitHub Actions",
+        body="If you're reading this, the email system works!"
+    )
+

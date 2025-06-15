@@ -8,6 +8,11 @@ import os
 import re
 from datetime import datetime
 from playwright.async_api import async_playwright
+import os
+
+os.makedirs("screenshots", exist_ok=True)
+await page.screenshot(path="screenshots/page_initial.png", full_page=True)
+
 
 KEYWORDS = [
     "reptile", "amphibian", "herp", "turtle", "toad", "frog", "seal",

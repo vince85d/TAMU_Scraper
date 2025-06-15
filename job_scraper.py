@@ -34,7 +34,10 @@ async def scrape_jobs():
         except Exception as e:
             # If selector not found, save another screenshot for debugging
             print(f"Wait for selector failed: {e}")
-            await page.screenshot(path="page_wait_fail.png", full_page=True)
+           await page.screenshot(path="screenshots/page_initial.png", full_page=True)
+            # ...
+            await page.screenshot(path="screenshots/page_error.png", full_page=True)
+
             print("Screenshot saved: page_wait_fail.png")
             await browser.close()
             raise e  # Or return empty list if you prefer to continue gracefully

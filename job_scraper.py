@@ -1,7 +1,43 @@
+import requests
+from bs4 import BeautifulSoup
+from datetime import datetime
 import smtplib
 import ssl
 from email.message import EmailMessage
 import os
+
+def scrape_jobs():
+    url = "https://jobs.rwfm.tamu.edu/search/"
+    keywords = [
+        "reptile", "amphibian", "herp", "turtle", "toad", "frog", "seal", "island",
+        "whale", "cetacean", "tortoise", "spatial ecology", "predator", "tropical"
+    ]
+
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    postings = soup.find_all("li", class_="search-result")
+    print(f"[{datetime.now()}] Scanned {len(postings)} job postings")
+
+    matches = []
+
+    for posting in postings:
+        title_tag = posting.find("a")
+        if not title_tag:
+            continue
+
+        title = title_tag.get_text(strip=True)
+        link = title_tag["href"]
+        summary = posting.get_text(separator=" ", strip=True).lower()
+
+        for kw in keywords:
+            if kw.lower() in summary:
+                matches.append(f"{title}\nLink: {link}")
+                break  # Stop checking more keywords if one matched
+
+    print(f"[{datetime.now()}] Found {len(matches)} matching jobs")
+    return matches
+
 
 def send_email(subject, body):
     EMAIL_USER = os.getenv('EMAIL_USER')
@@ -25,69 +61,19 @@ def send_email(subject, body):
         print(f"Email sent successfully to {EMAIL_TO}")
     except Exception as e:
         print(f"Failed to send email: {e}")
-        
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
-from datetime import datetime
-import smtplib
-import ssl
-from email.message import EmailMessage
-import os
 
-# Keywords you're searching for in job titles
-KEYWORDS = [
-    "reptile", "amphibian", "herp", "turtle", "toad", "frog",
-    "seal", "island", "whale", "cetacean", "tortoise",
-    "spatial ecology", "predator", "tropical"
-]
 
-# Scrape jobs from the TAMU job board
-def scrape_jobs():
-    url = "https://jobs.rwfm.tamu.edu/search/"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    jobs = []
-    for row in soup.select("tr.job"):
-        cols = row.find_all("td")
-        if len(cols) < 4:
-            continue
-        title = cols[0].text.strip()
-        organization = cols[1].text.strip()
-        location = cols[2].text.strip()
-        deadline = cols[3].text.strip()
-        description = title.lower()
-
-        if any(k in description for k in KEYWORDS):
-            link = row.find("a")["href"]
-            jobs.append({
-                "title": title,
-                "organization": organization,
-                "location": location,
-                "deadline": deadline,
-                "link": link
-            })
 if __name__ == "__main__":
-    # Run your scraper function
     job_listings = scrape_jobs()
 
     if job_listings:
         job_text = "\n\n".join(job_listings)
         send_email(
             subject="🦎 Daily TAMU Wildlife Jobs",
-            body=f"Found {len(job_listings)} job(s):\n\n{job_text}"
+            body=f"Found {len(job_listings)} matching job(s):\n\n{job_text}"
         )
     else:
         send_email(
             subject="🦎 Daily TAMU Wildlife Jobs",
             body="No matching jobs found today."
         )
-
-
-
-
-# Save scraped jobs as a CSV file
-def save_jobs(jobs, filename):
-    df = pd.DataFrame

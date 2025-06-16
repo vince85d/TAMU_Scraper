@@ -15,14 +15,14 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
         
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests beautifulsoup4 schedule
+        pip install requests beautifulsoup4
         
     - name: Run job scraper
       env:
@@ -33,9 +33,21 @@ jobs:
         SMTP_PORT: ${{ secrets.SMTP_PORT }}
       run: python job_scraper.py
       
-    - name: Upload logs
+    - name: Upload logs and state
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: scraper-logs
-        path: sent_jobs.json
+        path: |
+          sent_jobs.json
+          *.log
+        retention-days: 30
+        
+    - name: Commit updated sent_jobs.json
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add sent_jobs.json
+        git diff --staged --quiet || git commit -m "Update sent jobs list [automated]"
+        git push
+      continue-on-error: true

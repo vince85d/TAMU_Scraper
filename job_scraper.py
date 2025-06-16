@@ -260,7 +260,7 @@ class TAMUJobScraper:
     
     def create_email_body(self, jobs):
         """Create HTML email body"""
-       html = f"""
+        html = f"""    
         <html>
         <head>
             <style>

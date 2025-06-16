@@ -14,7 +14,7 @@ class TAMUJobScraper:
         self.keywords = [
             "reptile", "amphibian", "herp", "turtle", "toad", "frog", 
             "seal", "island", "whale", "cetacean", "tortoise", 
-            "spatial ecology", "predator", "tropical", "graduate", "hawaii", 
+            "spatial ecology", "predator", "tropical", "hawaii", 
             "bear", "lion", "master", "snake", "lizard", "alligator", "crocodile"
         ]
         self.email_config = email_config

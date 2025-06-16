@@ -338,8 +338,13 @@ def main():
     if missing_vars:
         print(f"Missing required environment variables: {missing_vars}")
         print("Please set the following GitHub Secrets:")
-        for var in missing_vars:
-            print(f"  - {var.upper()}")
+        print("  - FROM_EMAIL")
+        print("  - EMAIL_PASSWORD") 
+        print("  - TO_EMAIL")
+        print("\nCurrent values:")
+        print(f"  FROM_EMAIL: {'✓' if email_config['from_email'] else '✗ (empty/missing)'}")
+        print(f"  EMAIL_PASSWORD: {'✓' if email_config['password'] else '✗ (empty/missing)'}")
+        print(f"  TO_EMAIL: {'✓' if email_config['to_email'] else '✗ (empty/missing)'}")
         return
     
     print("Email configuration loaded successfully")

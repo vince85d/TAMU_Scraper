@@ -39,73 +39,147 @@ class TAMUJobScraper:
             print(f"Error saving sent jobs: {e}")
     
     def scrape_jobs(self):
-        """Scrape job listings from TAMU website"""
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-            
-            print(f"Fetching jobs from: {self.base_url}")
-            response = requests.get(self.base_url, headers=headers, timeout=30)
-            response.raise_for_status()
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            jobs = []
-            
-            # Multiple strategies to find job listings
-            selectors = [
-                {'tag': 'div', 'class': re.compile(r'job|posting|listing|position', re.I)},
-                {'tag': 'article', 'class': re.compile(r'job|posting|listing|position', re.I)},
-                {'tag': 'li', 'class': re.compile(r'job|posting|listing|position', re.I)},
-                {'tag': 'tr', 'class': re.compile(r'job|posting|listing|position', re.I)},
-                {'tag': 'div', 'attrs': {'data-job': True}},
-                {'tag': 'a', 'href': re.compile(r'job|posting|position', re.I)},
-            ]
-            
-            job_elements = []
-            for selector in selectors:
-                if 'class' in selector:
-                    elements = soup.find_all(selector['tag'], class_=selector['class'])
-                elif 'href' in selector:
-                    elements = soup.find_all(selector['tag'], href=selector['href'])  
-                elif 'attrs' in selector:
-                    elements = soup.find_all(selector['tag'], attrs=selector['attrs'])
-                else:
-                    elements = soup.find_all(selector['tag'])
-                
-                if elements:
-                    job_elements.extend(elements)
-                    print(f"Found {len(elements)} elements with selector: {selector}")
-                    break
-            
-            # Fallback: look for any links that might be job postings
-            if not job_elements:
-                print("No job elements found with standard selectors, trying fallback...")
-                all_links = soup.find_all('a', href=True)
-                job_elements = [link for link in all_links if any(
-                    word in link.get_text().lower() or word in link.get('href', '').lower() 
-                    for word in ['job', 'position', 'posting', 'career', 'opening']
-                )]
-                print(f"Found {len(job_elements)} potential job links")
-            
-            print(f"Processing {len(job_elements)} job elements...")
-            
-            for i, job_element in enumerate(job_elements):
-                try:
-                    job_data = self.extract_job_data(job_element)
-                    if job_data and self.contains_keywords(job_data):
-                        jobs.append(job_data)
-                        print(f"Job {i+1} matches keywords: {job_data['title']}")
-                except Exception as e:
-                    print(f"Error processing job element {i+1}: {e}")
-                    continue
-            
-            print(f"Found {len(jobs)} jobs matching keywords")
-            return jobs
-            
-        except Exception as e:
-            print(f"Error scraping jobs: {str(e)}")
-            return []
+    jobs = []
+    page_num = 1
+    max_pages = 100  # safety limit
+    while True:
+        url = f"https://jobs.rwfm.tamu.edu/search/?PageSize=10&PageNum={page_num}#results"
+        print(f"Fetching jobs from: {url}")
+        response = requests.get(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }, timeout=30)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Your existing logic to find job_elements
+        job_elements = []
+        selectors = [
+            {'tag': 'div', 'class': re.compile(r'job|posting|listing|position', re.I)},
+            {'tag': 'article', 'class': re.compile(r'job|posting|listing|position', re.I)},
+            {'tag': 'li', 'class': re.compile(r'job|posting|listing|position', re.I)},
+            {'tag': 'tr', 'class': re.compile(r'job|posting|listing|position', re.I)},
+            {'tag': 'div', 'attrs': {'data-job': True}},
+            {'tag': 'a', 'href': re.compile(r'job|posting|position', re.I)},
+        ]
+        for selector in selectors:
+            if 'class' in selector:
+                elements = soup.find_all(selector['tag'], class_=selector['class'])
+            elif 'href' in selector:
+                elements = soup.find_all(selector['tag'], href=selector['href'])  
+            elif 'attrs' in selector:
+                elements = soup.find_all(selector['tag'], attrs=selector['attrs'])
+            else:
+                elements = soup.find_all(selector['tag'])
+            if elements:
+                job_elements.extend(elements)
+                print(f"Found {len(elements)} elements with selector: {selector}")
+                break
+
+        if not job_elements:
+            print(f"No jobs found on page {page_num}. Stopping pagination.")
+            break
+
+        print(f"Processing {len(job_elements)} job elements on page {page_num}...")
+        for i, job_element in enumerate(job_elements):
+            try:
+                job_data = self.extract_job_data(job_element)
+                if job_data and self.contains_keywords(job_data):
+                    jobs.append(job_data)
+                    print(f"Job {i+1} matches keywords: {job_data['title']}")
+            except Exception as e:
+                print(f"Error processing job element {i+1}: {e}")
+                continue
+
+        page_num += 1
+        if page_num > max_pages:
+            print("Reached maximum page limit, stopping.")
+            break
+
+    print(f"Found {len(jobs)} jobs matching keywords across all pages")
+    return jobs
+Notes:
+
+This method will scrape all available pages until it finds a page with no job elements.
+Adjust max_pages if you want to limit how many pages to check (prevents infinite loops).
+Replace your current scrape_jobs method with this updated version.
+Let me know if you want the full function ready to paste, or if you need help integrating it!
+
+is this replacing something or just being added on
+The pagination code I provided is intended to replace your current scrape_jobs method, not to be added on top of it. You should:
+
+Locate your existing def scrape_jobs(self): method in job_scraper.py.
+Replace the entire contents of that method (from def scrape_jobs(self): to the final return or end of the method) with the new pagination-aware version.
+This way, your scraper will loop through all available result pages instead of only scraping the first page.
+
+If you want the complete, ready-to-paste replacement function, let me know!
+
+yes id like that
+Here is a ready-to-paste replacement for your entire scrape_jobs method, updated to handle pagination through all result pages on https://jobs.rwfm.tamu.edu/search/:
+
+Python
+def scrape_jobs(self):
+    """Scrape all job listings from TAMU website, handling pagination"""
+    jobs = []
+    page_num = 1
+    max_pages = 100  # safety limit to prevent infinite loops
+
+    while True:
+        url = f"https://jobs.rwfm.tamu.edu/search/?PageSize=10&PageNum={page_num}#results"
+        print(f"Fetching jobs from: {url}")
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        selectors = [
+            {'tag': 'div', 'class': re.compile(r'job|posting|listing|position', re.I)},
+            {'tag': 'article', 'class': re.compile(r'job|posting|listing|position', re.I)},
+            {'tag': 'li', 'class': re.compile(r'job|posting|listing|position', re.I)},
+            {'tag': 'tr', 'class': re.compile(r'job|posting|listing|position', re.I)},
+            {'tag': 'div', 'attrs': {'data-job': True}},
+            {'tag': 'a', 'href': re.compile(r'job|posting|position', re.I)},
+        ]
+
+        job_elements = []
+        for selector in selectors:
+            if 'class' in selector:
+                elements = soup.find_all(selector['tag'], class_=selector['class'])
+            elif 'href' in selector:
+                elements = soup.find_all(selector['tag'], href=selector['href'])  
+            elif 'attrs' in selector:
+                elements = soup.find_all(selector['tag'], attrs=selector['attrs'])
+            else:
+                elements = soup.find_all(selector['tag'])
+            if elements:
+                job_elements.extend(elements)
+                print(f"Found {len(elements)} elements with selector: {selector}")
+                break
+
+        if not job_elements:
+            print(f"No jobs found on page {page_num}. Stopping pagination.")
+            break
+
+        print(f"Processing {len(job_elements)} job elements on page {page_num}...")
+        for i, job_element in enumerate(job_elements):
+            try:
+                job_data = self.extract_job_data(job_element)
+                if job_data and self.contains_keywords(job_data):
+                    jobs.append(job_data)
+                    print(f"Job {i+1} matches keywords: {job_data['title']}")
+            except Exception as e:
+                print(f"Error processing job element {i+1}: {e}")
+                continue
+
+        page_num += 1
+        if page_num > max_pages:
+            print("Reached maximum page limit, stopping.")
+            break
+
+    print(f"Found {len(jobs)} jobs matching keywords across all pages")
+    return jobs
     
     def extract_job_data(self, element):
         """Extract job data from HTML element"""

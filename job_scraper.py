@@ -260,23 +260,23 @@ class TAMUJobScraper:
     
     def create_email_body(self, jobs):
         """Create HTML email body"""
-        html = """
+       html = f"""
         <html>
         <head>
             <style>
-                body { font-family: Arial, sans-serif; margin: 20px; }
-                .job { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }
-                .title { color: #500000; font-size: 18px; font-weight: bold; margin-bottom: 10px; }
-                .url { color: #0066cc; text-decoration: none; }
-                .description { margin-top: 10px; color: #333; }
-                .date { color: #666; font-size: 12px; }
-                .keywords { background-color: #f0f0f0; padding: 5px; margin-top: 10px; font-size: 12px; }
+                body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                .job {{ border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }}
+                .title {{ color: #500000; font-size: 18px; font-weight: bold; margin-bottom: 10px; }}
+                .url {{ color: #0066cc; text-decoration: none; }}
+                .description {{ margin-top: 10px; color: #333; }}
+                .date {{ color: #666; font-size: 12px; }}
+                .keywords {{ background-color: #f0f0f0; padding: 5px; margin-top: 10px; font-size: 12px; }}
             </style>
         </head>
         <body>
             <h2>TAMU Job Alert - Wildlife/Ecology Positions</h2>
-            <p>Found {job_count} new job(s) matching your keywords:</p>
-        """.format(job_count=len(jobs))
+            <p>Found {len(jobs)} new job(s) matching your keywords:</p>
+        """
         
         for job in jobs:
             # Find matching keywords for this job
@@ -293,11 +293,11 @@ class TAMUJobScraper:
             </div>
             """
         
-        html += """
-            <p><em>This is an automated job alert. Keywords: {keywords}</em></p>
+        html += f"""
+            <p><em>This is an automated job alert. Keywords: {', '.join(self.keywords)}</em></p>
         </body>
         </html>
-        """.format(keywords=', '.join(self.keywords))
+        """
         
         return html
     

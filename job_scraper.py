@@ -320,12 +320,15 @@ class TAMUJobScraper:
 
 def main():
     # Email configuration from environment variables
+    smtp_port_str = os.environ.get('SMTP_PORT', '587').strip()
+    smtp_port = 587 if not smtp_port_str else int(smtp_port_str)
+    
     email_config = {
-        'from_email': os.environ.get('FROM_EMAIL'),
-        'password': os.environ.get('EMAIL_PASSWORD'),
-        'to_email': os.environ.get('TO_EMAIL'),
-        'smtp_server': os.environ.get('SMTP_SERVER', 'smtp.gmail.com'),
-        'smtp_port': int(os.environ.get('SMTP_PORT', '587'))
+        'from_email': os.environ.get('FROM_EMAIL', '').strip(),
+        'password': os.environ.get('EMAIL_PASSWORD', '').strip(),
+        'to_email': os.environ.get('TO_EMAIL', '').strip(),
+        'smtp_server': os.environ.get('SMTP_SERVER', 'smtp.gmail.com').strip(),
+        'smtp_port': smtp_port
     }
     
     # Validate configuration

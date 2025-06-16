@@ -14,7 +14,7 @@ class TAMUJobScraper:
         self.keywords = [
             "reptile", "amphibian", "herp", "turtle", "toad", "frog", 
             "seal", "island", "whale", "cetacean", "tortoise", 
-            "spatial ecology", "predator", "tropical", "wildlife"
+            "spatial ecology", "predator", "tropical"
         ]
         self.email_config = email_config
         self.sent_jobs_file = "sent_jobs.json"

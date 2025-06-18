@@ -7,6 +7,7 @@ import json
 import os
 from datetime import datetime, timedelta
 import re
+from urllib.parse import urljoin
 
 class TAMUJobScraper:
     def __init__(self, email_config):
@@ -139,21 +140,21 @@ class TAMUJobScraper:
             if not title or len(title) < 3:
                 return None
             
-            # Extract job URL
+            # Extract job URL using urljoin
             url = None
+            href = None
+                
             if element.name == 'a' and element.get('href'):
                 href = element['href']
             else:
-                link_elem = element.find('a', href=True)
-                href = link_elem['href'] if link_elem else None
-            
+                 link_elem = element.find('a', href=True)
+                if link_elem:
+                        href = link_elem['href']
+                
             if href:
-                if href.startswith('http'):
-                    url = href
-                elif href.startswith('/'):
-                    url = f"https://jobs.rwfm.tamu.edu{href}"
-                else:
-                    url = f"https://jobs.rwfm.tamu.edu/{href}"
+                 # Use urljoin to properly construct the URL
+                base_url = "https://jobs.rwfm.tamu.edu/"
+                url = urljoin(base_url, href.strip())
             else:
                 url = "No URL found"
             

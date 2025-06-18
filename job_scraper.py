@@ -215,8 +215,8 @@ class TAMUJobScraper:
             days_ago = int(days_ago_match.group(1))
             return days_ago <= days
     
-    # If no date found, include it (better safe than sorry)
-    return True
+        # If no date found, include it (better safe than sorry)
+        return True
     
     def contains_keywords(self, job_data):
         """Check if job contains any of the target keywords"""

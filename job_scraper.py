@@ -42,7 +42,7 @@ class TAMUJobScraper:
     def scrape_jobs(self):
         jobs = []
         page_num = 1
-        max_pages = 100  # safety limit
+        max_pages = 10  # safety limit
         while True:
             url = f"https://jobs.rwfm.tamu.edu/search/?PageSize=50&PageNum={page_num}#results"
             print(f"Fetching jobs from: {url}")

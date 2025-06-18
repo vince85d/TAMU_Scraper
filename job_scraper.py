@@ -15,7 +15,7 @@ class TAMUJobScraper:
             "reptile", "amphibian", "herp", "turtle", "toad", "frog", 
             "seal", "island", "whale", "cetacean", "tortoise", 
             "spatial ecology", "predator", "tropical", "hawaii", 
-            "bear", "lion", "master", "snake", "lizard", "alligator", "crocodile"
+            "bear", "lion", "snake", "lizard", "alligator", "crocodile"
         ]
         self.email_config = email_config
         self.sent_jobs_file = "sent_jobs.json"
@@ -191,6 +191,23 @@ class TAMUJobScraper:
         except Exception as e:
             print(f"Error extracting job data: {str(e)}")
             return None
+
+            # Add this constant at the top of your class
+    DAYS_TO_SEARCH = 7  # Change this value as needed
+    
+    # Modify your existing run_daily_scrape method
+    def run_daily_scrape(self):
+        print(f"Running job scrape for last {self.DAYS_TO_SEARCH} days...")
+        
+        # Your existing scraping logic here
+        all_jobs = self.fetch_jobs()
+        
+        # Add date filtering
+        recent_jobs = self.filter_recent_jobs(all_jobs, self.DAYS_TO_SEARCH)
+        
+        # Continue with your existing keyword matching and email logic
+        matching_jobs = [job for job in recent_jobs if self.matches_keywords(job)]
+        # ... rest of your existing code  
     
     def contains_keywords(self, job_data):
         """Check if job contains any of the target keywords"""

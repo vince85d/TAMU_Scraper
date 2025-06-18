@@ -5,7 +5,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 
 class TAMUJobScraper:
@@ -44,7 +44,7 @@ class TAMUJobScraper:
         page_num = 1
         max_pages = 100  # safety limit
         while True:
-            url = f"https://jobs.rwfm.tamu.edu/search/?PageSize=10&PageNum={page_num}#results"
+            url = f"https://jobs.rwfm.tamu.edu/search/?PageSize=50&PageNum={page_num}#results"
             print(f"Fetching jobs from: {url}")
             response = requests.get(url, headers={
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -83,6 +83,11 @@ class TAMUJobScraper:
             print(f"Processing {len(job_elements)} job elements on page {page_num}...")
             for i, job_element in enumerate(job_elements):
                 try:
+                    # Check if job is recent before processing it
+                    job_text = job_element.get_text()
+                    if not self.is_job_recent(job_text, days=7):
+                        continue  # Skip this job if it's older than 7 days
+                        
                     job_data = self.extract_job_data(job_element)
                     if job_data and self.contains_keywords(job_data):
                         jobs.append(job_data)
@@ -192,22 +197,26 @@ class TAMUJobScraper:
             print(f"Error extracting job data: {str(e)}")
             return None
 
-            # Add this constant at the top of your class
-    DAYS_TO_SEARCH = 7  # Change this value as needed
+    def is_job_recent(self, job_text, days=7):
+        """Check if job was posted in the last N days"""
+        # Look for "Published:MM/DD/YYYY" pattern
+        date_match = re.search(r'Published:(\d{2}/\d{2}/\d{4})', job_text)
+        if date_match:
+            try:
+                job_date = datetime.strptime(date_match.group(1), '%m/%d/%Y')
+                cutoff_date = datetime.now() - timedelta(days=days)
+                return job_date >= cutoff_date
+            except ValueError:
+                pass
+        
+        # Look for "X days ago"
+        days_ago_match = re.search(r'(\d+)\s+days?\s+ago', job_text, re.IGNORECASE)
+        if days_ago_match:
+            days_ago = int(days_ago_match.group(1))
+            return days_ago <= days
     
-    # Modify your existing run_daily_scrape method
-    def run_daily_scrape(self):
-        print(f"Running job scrape for last {self.DAYS_TO_SEARCH} days...")
-        
-        # Your existing scraping logic here
-        all_jobs = self.fetch_jobs()
-        
-        # Add date filtering
-        recent_jobs = self.filter_recent_jobs(all_jobs, self.DAYS_TO_SEARCH)
-        
-        # Continue with your existing keyword matching and email logic
-        matching_jobs = [job for job in recent_jobs if self.matches_keywords(job)]
-        # ... rest of your existing code  
+    # If no date found, include it (better safe than sorry)
+    return True
     
     def contains_keywords(self, job_data):
         """Check if job contains any of the target keywords"""

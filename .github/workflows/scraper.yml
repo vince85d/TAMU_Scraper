@@ -24,6 +24,9 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests beautifulsoup4
         
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+        
     - name: Run job scraper
       env:
         FROM_EMAIL: ${{ secrets.FROM_EMAIL }}

@@ -147,7 +147,7 @@ class TAMUJobScraper:
             if element.name == 'a' and element.get('href'):
                 href = element['href']
             else:
-                 link_elem = element.find('a', href=True)
+                link_elem = element.find('a', href=True)
                 if link_elem:
                         href = link_elem['href']
                 

@@ -24,8 +24,8 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests beautifulsoup4
         
-    - name: Install dependencies
-      run: pip install -r requirements.txt
+    - name: Install Selenium
+      run: pip install selenium
         
     - name: Run job scraper
       env:

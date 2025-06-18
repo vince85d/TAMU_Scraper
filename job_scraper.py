@@ -59,88 +59,98 @@ class TAMUJobScraper:
             print(f"Error saving sent jobs: {e}")
     
     def scrape_jobs(self):
-        jobs = []
+        # First pass: Use requests to quickly filter jobs
+        potential_jobs = []
+        page_num = 1
+        max_pages = 10  # safety limit
+        
+        while True:
+            url = f"https://jobs.rwfm.tamu.edu/search/?PageSize=50&PageNum={page_num}#results"
+            print(f"Quickly scanning jobs from: {url}")
+            response = requests.get(url, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }, timeout=30)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.content, 'html.parser')
+    
+            # Your existing logic to find job_elements
+            job_elements = []
+            selectors = [
+                {'tag': 'div', 'class': re.compile(r'job|posting|listing|position', re.I)},
+                {'tag': 'article', 'class': re.compile(r'job|posting|listing|position', re.I)},
+                {'tag': 'li', 'class': re.compile(r'job|posting|listing|position', re.I)},
+                {'tag': 'tr', 'class': re.compile(r'job|posting|listing|position', re.I)},
+                {'tag': 'div', 'attrs': {'data-job': True}},
+                {'tag': 'a', 'href': re.compile(r'job|posting|position', re.I)},
+            ]
+            for selector in selectors:
+                if 'class' in selector:
+                    elements = soup.find_all(selector['tag'], class_=selector['class'])
+                elif 'href' in selector:
+                    elements = soup.find_all(selector['tag'], href=selector['href'])  
+                elif 'attrs' in selector:
+                    elements = soup.find_all(selector['tag'], attrs=selector['attrs'])
+                else:
+                    elements = soup.find_all(selector['tag'])
+                if elements:
+                    job_elements.extend(elements)
+                    print(f"Found {len(elements)} elements with selector: {selector}")
+                    break
+    
+            if not job_elements:
+                print(f"No jobs found on page {page_num}. Stopping pagination.")
+                break
+    
+            print(f"Quick-scanning {len(job_elements)} job elements on page {page_num}...")
+            for i, job_element in enumerate(job_elements):
+                try:
+                    # Check if job is recent before processing it
+                    job_text = job_element.get_text()
+                    if not self.is_job_recent(job_text, days=7):
+                        continue  # Skip this job if it's older than 7 days
+                        
+                    job_data = self.extract_job_data(job_element)  # Use fast extraction
+                    if job_data and self.contains_keywords(job_data):
+                        potential_jobs.append(job_data)
+                        print(f"Job {i+1} matches keywords: {job_data['title']}")
+                except Exception as e:
+                    print(f"Error processing job element {i+1}: {e}")
+                    continue
+    
+            page_num += 1
+            if page_num > max_pages:
+                print("Reached maximum page limit, stopping.")
+                break
+    
+        print(f"Found {len(potential_jobs)} potential jobs matching keywords")
+        
+        # Filter out jobs we've already sent
+        new_jobs = [job for job in potential_jobs if job['id'] not in self.sent_jobs]
+        print(f"Found {len(new_jobs)} new jobs that haven't been sent")
+        
+        if not new_jobs:
+            return []
+        
+        # Second pass: Use Selenium only for jobs we'll actually send
+        print(f"Using Selenium to get direct links for {len(new_jobs)} new jobs...")
+        jobs_with_links = []
         driver = self.setup_selenium_driver()
         
         try:
-            page_num = 1
-            max_pages = 10  # safety limit
-            
-            while True:
-                url = f"https://jobs.rwfm.tamu.edu/search/?PageSize=50&PageNum={page_num}#results"
-                print(f"Fetching jobs from: {url}")
-                
-                driver.get(url)
-                
-                # Wait for page to load
-                WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.TAG_NAME, "body"))
-                )
-                
-                # Get page source and parse with BeautifulSoup for consistency
-                soup = BeautifulSoup(driver.page_source, 'html.parser')
-        
-                # Your existing logic to find job_elements
-                job_elements = []
-                selectors = [
-                    {'tag': 'div', 'class': re.compile(r'job|posting|listing|position', re.I)},
-                    {'tag': 'article', 'class': re.compile(r'job|posting|listing|position', re.I)},
-                    {'tag': 'li', 'class': re.compile(r'job|posting|listing|position', re.I)},
-                    {'tag': 'tr', 'class': re.compile(r'job|posting|listing|position', re.I)},
-                    {'tag': 'div', 'attrs': {'data-job': True}},
-                    {'tag': 'a', 'href': re.compile(r'job|posting|position', re.I)},
-                ]
-                
-                for selector in selectors:
-                    if 'class' in selector:
-                        elements = soup.find_all(selector['tag'], class_=selector['class'])
-                    elif 'href' in selector:
-                        elements = soup.find_all(selector['tag'], href=selector['href'])  
-                    elif 'attrs' in selector:
-                        elements = soup.find_all(selector['tag'], attrs=selector['attrs'])
-                    else:
-                        elements = soup.find_all(selector['tag'])
-                    if elements:
-                        job_elements.extend(elements)
-                        print(f"Found {len(elements)} elements with selector: {selector}")
-                        break
-        
-                if not job_elements:
-                    print(f"No jobs found on page {page_num}. Stopping pagination.")
-                    break
-        
-                print(f"Processing {len(job_elements)} job elements on page {page_num}...")
-                
-                for i, job_element in enumerate(job_elements):
-                    try:
-                        # Check if job is recent before processing it
-                        job_text = job_element.get_text()
-                        if not self.is_job_recent(job_text, days=7):
-                            continue  # Skip this job if it's older than 7 days
-                            
-                        job_data = self.extract_job_data_with_selenium(job_element, driver)
-                        if job_data and self.contains_keywords(job_data):
-                            jobs.append(job_data)
-                            print(f"Job {i+1} matches keywords: {job_data['title']}")
-                    except Exception as e:
-                        print(f"Error processing job element {i+1}: {e}")
-                        continue
-        
-                page_num += 1
-                if page_num > max_pages:
-                    print("Reached maximum page limit, stopping.")
-                    break
+            for job in new_jobs:
+                enhanced_job = self.get_job_direct_link(job, driver)
+                if enhanced_job:
+                    jobs_with_links.append(enhanced_job)
                     
         finally:
             driver.quit()
+        
+        return jobs_with_links
     
-        print(f"Found {len(jobs)} jobs matching keywords across all pages")
-        return jobs
-    
-    def extract_job_data_with_selenium(self, element, driver):
-        """Extract job data from HTML element using Selenium for click-through"""
+    def extract_job_data(self, element):
+        """Extract job data from HTML element (fast version for filtering)"""
         try:
-            # Extract basic info from listing page first
+            # Extract job title - try multiple approaches
             title = None
             title_selectors = [
                 {'tag': ['h1', 'h2', 'h3', 'h4'], 'class': re.compile(r'title|heading|job-title', re.I)},
@@ -162,48 +172,109 @@ class TAMUJobScraper:
                     break
             
             if not title:
+                # If element itself is a link, use its text
                 if element.name == 'a':
                     title = element.get_text(strip=True)
                 else:
+                    # Last resort: use first 100 characters of element text
                     title = element.get_text(strip=True)[:100]
             
             if not title or len(title) < 3:
                 return None
             
-            # Find the clickable element for this job
-            clickable_element = None
+            # Extract job URL using urljoin (but don't click through yet)
+            url = None
             href = None
-            
+                
             if element.name == 'a' and element.get('href'):
                 href = element['href']
             else:
                 link_elem = element.find('a', href=True)
                 if link_elem:
-                    href = link_elem['href']
+                        href = link_elem['href']
+                
+            if href:
+                 # Use urljoin to properly construct the URL
+                base_url = "https://jobs.rwfm.tamu.edu/"
+                url = urljoin(base_url, href.strip())
+            else:
+                url = "No URL found"
             
-            if not href:
-                return None
+            # Extract description/summary
+            description = ""
+            desc_selectors = [
+                {'class': re.compile(r'desc|summary|content|detail', re.I)},
+                {'tag': 'p'},
+                {'tag': 'div'}
+            ]
             
-            # Find the corresponding clickable element in Selenium
-            try:
-                # Try to find the element by href attribute
-                clickable_element = driver.find_element(By.XPATH, f"//a[@href='{href}']")
-            except:
+            for selector in desc_selectors:
+                if 'tag' in selector:
+                    desc_elem = element.find(selector['tag'])
+                else:
+                    desc_elem = element.find(class_=selector['class'])
+                
+                if desc_elem:
+                    description = desc_elem.get_text(strip=True)
+                    break
+            
+            if not description:
+                description = element.get_text(strip=True)
+            
+            # Limit description length
+            if len(description) > 1000:
+                description = description[:1000] + "..."
+            
+            # Create unique ID for job
+            job_id = f"{title}_{url}".replace(' ', '_').replace('/', '_')[:200]
+            
+            return {
+                'id': job_id,
+                'title': title,
+                'url': url,  # This will be the constructed URL for now
+                'href': href,  # Store the href for Selenium later
+                'description': description,
+                'scraped_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+            
+        except Exception as e:
+            print(f"Error extracting job data: {str(e)}")
+            return None
+
+    def get_job_direct_link(self, job_data, driver):
+        """Get direct link to job posting using Selenium (only for jobs we'll send)"""
+        try:
+            print(f"Getting direct link for: {job_data['title']}")
+            
+            # Navigate to the search page that contains this job
+            # We need to figure out which page this job is on
+            # For now, let's search through pages to find this job
+            
+            found_job = False
+            for page_num in range(1, 11):  # Search first 10 pages
+                url = f"https://jobs.rwfm.tamu.edu/search/?PageSize=50&PageNum={page_num}#results"
+                driver.get(url)
+                
+                # Wait for page to load
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "body"))
+                )
+                
+                # Look for this specific job by title or href
                 try:
-                    # Try to find by partial text match
-                    clickable_element = driver.find_element(By.PARTIAL_LINK_TEXT, title[:50])
+                    if job_data.get('href'):
+                        clickable_element = driver.find_element(By.XPATH, f"//a[@href='{job_data['href']}']")
+                    else:
+                        clickable_element = driver.find_element(By.PARTIAL_LINK_TEXT, job_data['title'][:50])
+                    
+                    found_job = True
+                    break
                 except:
-                    print(f"Could not find clickable element for job: {title}")
-                    # Fall back to original URL construction
-                    base_url = "https://jobs.rwfm.tamu.edu/"
-                    url = urljoin(base_url, href.strip())
-                    return {
-                        'id': f"{title}_{url}".replace(' ', '_').replace('/', '_')[:200],
-                        'title': title,
-                        'url': url,
-                        'description': element.get_text(strip=True)[:1000],
-                        'scraped_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    }
+                    continue  # Try next page
+            
+            if not found_job:
+                print(f"Could not find clickable element for job: {job_data['title']}")
+                return job_data  # Return original data
             
             # Click the job to navigate to individual posting
             original_url = driver.current_url
@@ -222,7 +293,7 @@ class TAMUJobScraper:
                 job_url = driver.current_url
                 
                 # Extract additional details from job posting page
-                description = ""
+                description = job_data['description']  # Start with original
                 try:
                     # Wait for job details to load
                     WebDriverWait(driver, 5).until(
@@ -242,60 +313,32 @@ class TAMUJobScraper:
                     for by_type, selector in description_selectors:
                         try:
                             desc_element = driver.find_element(by_type, selector)
-                            description = desc_element.text.strip()
-                            if description and len(description) > 50:  # Only use if substantial
+                            new_description = desc_element.text.strip()
+                            if new_description and len(new_description) > len(description):  # Only use if better
+                                description = new_description
                                 break
                         except:
                             continue
-                    
-                    # If no good description found, use page body text
-                    if not description or len(description) < 50:
-                        body_element = driver.find_element(By.TAG_NAME, "body")
-                        description = body_element.text.strip()
                 
                 except Exception as e:
-                    print(f"Error extracting description: {e}")
-                    description = "Description not available"
+                    print(f"Error extracting enhanced description: {e}")
                 
-                # Go back to listings page for next iteration
-                driver.back()
+                # Update job data with direct link and enhanced description
+                enhanced_job = job_data.copy()
+                enhanced_job['url'] = job_url  # This is now the actual job posting URL!
+                enhanced_job['description'] = description[:1000] + ("..." if len(description) > 1000 else "")
+                enhanced_job['id'] = f"{job_data['title']}_{job_url}".replace(' ', '_').replace('/', '_')[:200]
                 
-                # Wait for listings page to reload
-                WebDriverWait(driver, 10).until(
-                    lambda d: d.current_url == original_url
-                )
-                
-                # Limit description length
-                if len(description) > 1000:
-                    description = description[:1000] + "..."
-                
-                # Create unique ID for job
-                job_id = f"{title}_{job_url}".replace(' ', '_').replace('/', '_')[:200]
-                
-                return {
-                    'id': job_id,
-                    'title': title,
-                    'url': job_url,  # This is now the actual job posting URL!
-                    'description': description,
-                    'scraped_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                }
+                print(f"✓ Got direct link: {job_url}")
+                return enhanced_job
                 
             except Exception as e:
                 print(f"Error clicking through to job: {e}")
-                # Fall back to original URL construction if click fails
-                base_url = "https://jobs.rwfm.tamu.edu/"
-                url = urljoin(base_url, href.strip())
-                return {
-                    'id': f"{title}_{url}".replace(' ', '_').replace('/', '_')[:200],
-                    'title': title,
-                    'url': url,
-                    'description': element.get_text(strip=True)[:1000],
-                    'scraped_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                }
+                return job_data  # Return original data if click fails
             
         except Exception as e:
-            print(f"Error extracting job data: {str(e)}")
-            return None
+            print(f"Error getting direct link: {str(e)}")
+            return job_data  # Return original data
 
     def is_job_recent(self, job_text, days=7):
         """Check if job was posted in the last N days"""
@@ -423,13 +466,12 @@ class TAMUJobScraper:
         """Run the daily scraping job"""
         print(f"Starting job scrape at {datetime.now()}")
         
-        jobs = self.scrape_jobs()
-        new_jobs = [job for job in jobs if job['id'] not in self.sent_jobs]
+        jobs = self.scrape_jobs()  # This now handles the two-pass approach internally
         
-        print(f"Found {len(jobs)} total jobs, {len(new_jobs)} new jobs")
+        print(f"Found {len(jobs)} new jobs with direct links")
         
-        if new_jobs:
-            self.send_email(new_jobs)
+        if jobs:
+            self.send_email(jobs)
         else:
             print("No new jobs found")
         

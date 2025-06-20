@@ -258,7 +258,9 @@ class TAMUJobScraper:
                         link_elem = element.find_element(By.TAG_NAME, "a")
                         url = urljoin("https://jobs.rwfm.tamu.edu/", link_elem.get_attribute('href'))
                 except NoSuchElementException:
-                    url = "print(f"Final job URL: {url}")
+                    url = "No URL Found"
+                    print(f"Final job URL: {url}")
+
 "
 
 

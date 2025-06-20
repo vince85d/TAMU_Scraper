@@ -1,5 +1,10 @@
-import requests
-from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -8,6 +13,7 @@ import os
 from datetime import datetime, timedelta
 import re
 from urllib.parse import urljoin
+import time
 
 class TAMUJobScraper:
     def __init__(self, email_config):
@@ -21,6 +27,46 @@ class TAMUJobScraper:
         self.email_config = email_config
         self.sent_jobs_file = "sent_jobs.json"
         self.sent_jobs = self.load_sent_jobs()
+        self.driver = None
+        
+    def setup_driver(self):
+        """Setup Chrome driver with appropriate options"""
+        chrome_options = Options()
+        
+        # Common options for both local and GitHub Actions
+        chrome_options.add_argument('--headless')  # Run in background
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_argument('--window-size=1920,1080')
+        chrome_options.add_argument('--disable-extensions')
+        chrome_options.add_argument('--disable-plugins')
+        chrome_options.add_argument('--disable-images')  # Speed up loading
+        chrome_options.add_argument('--disable-javascript')  # Only if the site works without JS
+        chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        
+        # Additional options for stability
+        chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        
+        try:
+            # Try to create driver - will work locally or in GitHub Actions with setup-chromedriver action
+            self.driver = webdriver.Chrome(options=chrome_options)
+            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            print("Chrome driver initialized successfully")
+        except Exception as e:
+            print(f"Error setting up Chrome driver: {e}")
+            raise
+    
+    def cleanup_driver(self):
+        """Clean up the driver"""
+        if self.driver:
+            try:
+                self.driver.quit()
+                print("Driver cleaned up successfully")
+            except Exception as e:
+                print(f"Error cleaning up driver: {e}")
         
     def load_sent_jobs(self):
         """Load previously sent job IDs to avoid duplicates"""
@@ -44,140 +90,190 @@ class TAMUJobScraper:
         jobs = []
         page_num = 1
         max_pages = 10  # safety limit
-        while True:
-            url = f"https://jobs.rwfm.tamu.edu/search/?PageSize=50&PageNum={page_num}#results"
-            print(f"Fetching jobs from: {url}")
-            response = requests.get(url, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }, timeout=30)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.content, 'html.parser')
-    
-            # Your existing logic to find job_elements
-            job_elements = []
-            selectors = [
-                {'tag': 'div', 'class': re.compile(r'job|posting|listing|position', re.I)},
-                {'tag': 'article', 'class': re.compile(r'job|posting|listing|position', re.I)},
-                {'tag': 'li', 'class': re.compile(r'job|posting|listing|position', re.I)},
-                {'tag': 'tr', 'class': re.compile(r'job|posting|listing|position', re.I)},
-                {'tag': 'div', 'attrs': {'data-job': True}},
-                {'tag': 'a', 'href': re.compile(r'job|posting|position', re.I)},
-            ]
-            for selector in selectors:
-                if 'class' in selector:
-                    elements = soup.find_all(selector['tag'], class_=selector['class'])
-                elif 'href' in selector:
-                    elements = soup.find_all(selector['tag'], href=selector['href'])  
-                elif 'attrs' in selector:
-                    elements = soup.find_all(selector['tag'], attrs=selector['attrs'])
-                else:
-                    elements = soup.find_all(selector['tag'])
-                if elements:
-                    job_elements.extend(elements)
-                    print(f"Found {len(elements)} elements with selector: {selector}")
-                    break
-    
-            if not job_elements:
-                print(f"No jobs found on page {page_num}. Stopping pagination.")
-                break
-    
-            print(f"Processing {len(job_elements)} job elements on page {page_num}...")
-            for i, job_element in enumerate(job_elements):
+        
+        try:
+            self.setup_driver()
+            
+            while page_num <= max_pages:
+                url = f"https://jobs.rwfm.tamu.edu/search/?PageSize=50&PageNum={page_num}#results"
+                print(f"Fetching jobs from: {url}")
+                
                 try:
-                    # Check if job is recent before processing it
-                    job_text = job_element.get_text()
-                    if not self.is_job_recent(job_text, days=7):
-                        continue  # Skip this job if it's older than 7 days
-                        
-                    job_data = self.extract_job_data(job_element)
-                    if job_data and self.contains_keywords(job_data):
-                        jobs.append(job_data)
-                        print(f"Job {i+1} matches keywords: {job_data['title']}")
-                except Exception as e:
-                    print(f"Error processing job element {i+1}: {e}")
-                    continue
-    
-            page_num += 1
-            if page_num > max_pages:
-                print("Reached maximum page limit, stopping.")
-                break
+                    self.driver.get(url)
+                    
+                    # Wait for page to load
+                    WebDriverWait(self.driver, 20).until(
+                        EC.presence_of_element_located((By.TAG_NAME, "body"))
+                    )
+                    
+                    # Additional wait for dynamic content
+                    time.sleep(3)
+                    
+                    # Find job elements using multiple strategies
+                    job_elements = self.find_job_elements()
+                    
+                    if not job_elements:
+                        print(f"No jobs found on page {page_num}. Stopping pagination.")
+                        break
+                    
+                    print(f"Processing {len(job_elements)} job elements on page {page_num}...")
+                    for i, job_element in enumerate(job_elements):
+                        try:
+                            # Check if job is recent before processing it
+                            job_text = job_element.text
+                            if not self.is_job_recent(job_text, days=7):
+                                continue  # Skip this job if it's older than 7 days
+                                
+                            job_data = self.extract_job_data(job_element)
+                            if job_data and self.contains_keywords(job_data):
+                                jobs.append(job_data)
+                                print(f"Job {i+1} matches keywords: {job_data['title']}")
+                        except Exception as e:
+                            print(f"Error processing job element {i+1}: {e}")
+                            continue
+                    
+                    page_num += 1
+                    
+                except TimeoutException:
+                    print(f"Timeout loading page {page_num}")
+                    break
+                except WebDriverException as e:
+                    print(f"WebDriver error on page {page_num}: {e}")
+                    break
+                    
+        finally:
+            self.cleanup_driver()
     
         print(f"Found {len(jobs)} jobs matching keywords across all pages")
         return jobs
     
+    def find_job_elements(self):
+        """Find job elements using multiple selectors"""
+        job_elements = []
+        
+        # CSS selectors to try (in order of preference)
+        selectors = [
+            "div[class*='job']",
+            "div[class*='posting']",
+            "div[class*='listing']",
+            "div[class*='position']",
+            "article[class*='job']",
+            "article[class*='posting']",
+            "li[class*='job']",
+            "li[class*='posting']",
+            "tr[class*='job']",
+            "div[data-job]",
+            "a[href*='job']",
+            "a[href*='posting']",
+            "a[href*='position']",
+            ".job",
+            ".posting",
+            ".listing",
+            ".position",
+            "[role='listitem']",
+            ".search-result",
+            ".result-item"
+        ]
+        
+        for selector in selectors:
+            try:
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                if elements:
+                    print(f"Found {len(elements)} elements with selector: {selector}")
+                    job_elements = elements
+                    break
+            except Exception as e:
+                print(f"Error with selector '{selector}': {e}")
+                continue
+        
+        # If no specific job elements found, try to find any links or divs that might contain jobs
+        if not job_elements:
+            try:
+                # Look for any links that might be job postings
+                links = self.driver.find_elements(By.TAG_NAME, "a")
+                job_elements = [link for link in links if link.get_attribute("href") and 
+                              any(keyword in link.get_attribute("href").lower() for keyword in ['job', 'posting', 'position'])]
+                if job_elements:
+                    print(f"Found {len(job_elements)} job links as fallback")
+            except Exception as e:
+                print(f"Error finding fallback elements: {e}")
+        
+        return job_elements
+    
     def extract_job_data(self, element):
-        """Extract job data from HTML element"""
+        """Extract job data from Selenium WebElement"""
         try:
             # Extract job title - try multiple approaches
             title = None
+            
+            # Try to find title using various selectors
             title_selectors = [
-                {'tag': ['h1', 'h2', 'h3', 'h4'], 'class': re.compile(r'title|heading|job-title', re.I)},
-                {'tag': 'a', 'class': re.compile(r'title|heading|job-title', re.I)},
-                {'tag': ['h1', 'h2', 'h3', 'h4']},
-                {'tag': 'a', 'href': True}
+                "h1, h2, h3, h4",
+                "[class*='title']",
+                "[class*='heading']",
+                "[class*='job-title']",
+                "a"
             ]
             
             for selector in title_selectors:
-                if 'class' in selector:
-                    title_elem = element.find(selector['tag'], class_=selector['class'])
-                elif 'href' in selector:
-                    title_elem = element.find(selector['tag'], href=True)
-                else:
-                    title_elem = element.find(selector['tag'])
-                
-                if title_elem:
-                    title = title_elem.get_text(strip=True)
-                    break
+                try:
+                    title_elem = element.find_element(By.CSS_SELECTOR, selector)
+                    if title_elem and title_elem.text.strip():
+                        title = title_elem.text.strip()
+                        break
+                except NoSuchElementException:
+                    continue
             
+            # If no title found, use element text or link text
             if not title:
-                # If element itself is a link, use its text
-                if element.name == 'a':
-                    title = element.get_text(strip=True)
+                if element.tag_name == 'a':
+                    title = element.text.strip()
                 else:
-                    # Last resort: use first 100 characters of element text
-                    title = element.get_text(strip=True)[:100]
+                    title = element.text.strip()[:100]  # First 100 chars as fallback
             
             if not title or len(title) < 3:
                 return None
             
-            # Extract job URL using urljoin
+            # Extract job URL
             url = None
-            href = None
-                
-            if element.name == 'a' and element.get('href'):
-                href = element['href']
-            else:
-                link_elem = element.find('a', href=True)
-                if link_elem:
-                        href = link_elem['href']
-                
-            if href:
-                 # Use urljoin to properly construct the URL
-                base_url = "https://jobs.rwfm.tamu.edu/"
-                url = urljoin(base_url, href.strip())
+            try:
+                if element.tag_name == 'a' and element.get_attribute('href'):
+                    url = element.get_attribute('href')
+                else:
+                    link_elem = element.find_element(By.TAG_NAME, "a")
+                    url = link_elem.get_attribute('href')
+            except NoSuchElementException:
+                pass
+            
+            if url:
+                # Ensure URL is absolute
+                if url.startswith('/'):
+                    url = urljoin("https://jobs.rwfm.tamu.edu/", url)
             else:
                 url = "No URL found"
             
             # Extract description/summary
             description = ""
             desc_selectors = [
-                {'class': re.compile(r'desc|summary|content|detail', re.I)},
-                {'tag': 'p'},
-                {'tag': 'div'}
+                "[class*='desc']",
+                "[class*='summary']", 
+                "[class*='content']",
+                "[class*='detail']",
+                "p",
+                "div"
             ]
             
             for selector in desc_selectors:
-                if 'tag' in selector:
-                    desc_elem = element.find(selector['tag'])
-                else:
-                    desc_elem = element.find(class_=selector['class'])
-                
-                if desc_elem:
-                    description = desc_elem.get_text(strip=True)
-                    break
+                try:
+                    desc_elem = element.find_element(By.CSS_SELECTOR, selector)
+                    if desc_elem and desc_elem.text.strip():
+                        description = desc_elem.text.strip()
+                        break
+                except NoSuchElementException:
+                    continue
             
             if not description:
-                description = element.get_text(strip=True)
+                description = element.text.strip()
             
             # Limit description length
             if len(description) > 1000:
@@ -324,18 +420,23 @@ class TAMUJobScraper:
         """Run the daily scraping job"""
         print(f"Starting job scrape at {datetime.now()}")
         
-        jobs = self.scrape_jobs()
-        new_jobs = [job for job in jobs if job['id'] not in self.sent_jobs]
-        
-        print(f"Found {len(jobs)} total jobs, {len(new_jobs)} new jobs")
-        
-        if new_jobs:
-            self.send_email(new_jobs)
-        else:
-            print("No new jobs found")
-        
-        # Always save the state
-        self.save_sent_jobs()
+        try:
+            jobs = self.scrape_jobs()
+            new_jobs = [job for job in jobs if job['id'] not in self.sent_jobs]
+            
+            print(f"Found {len(jobs)} total jobs, {len(new_jobs)} new jobs")
+            
+            if new_jobs:
+                self.send_email(new_jobs)
+            else:
+                print("No new jobs found")
+            
+        except Exception as e:
+            print(f"Error during scraping: {e}")
+            raise
+        finally:
+            # Always save the state
+            self.save_sent_jobs()
 
 def main():
     # Email configuration from environment variables

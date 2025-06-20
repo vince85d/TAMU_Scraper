@@ -234,23 +234,30 @@ class TAMUJobScraper:
             if not title or len(title) < 3:
                 return None
             
-            # Extract job URL
+            # Extract job URL — look for the "Open in new window" link
             url = None
             try:
-                if element.tag_name == 'a' and element.get_attribute('href'):
-                    url = element.get_attribute('href')
-                else:
-                    link_elem = element.find_element(By.TAG_NAME, "a")
-                    url = link_elem.get_attribute('href')
+                links = element.find_elements(By.TAG_NAME, "a")
+                for link in links:
+                    link_text = link.text.strip().lower()
+                    href = link.get_attribute('href')
+                    if "open in new window" in link_text and href:
+                        url = urljoin("https://jobs.rwfm.tamu.edu/", href)
+                        break
             except NoSuchElementException:
                 pass
             
-            if url:
-                # Ensure URL is absolute
-                if url.startswith('/'):
-                    url = urljoin("https://jobs.rwfm.tamu.edu/", url)
-            else:
-                url = "No URL found"
+            # Fallback to first available link if "Open in new window" wasn't found
+            if not url:
+                try:
+                    if element.tag_name == 'a' and element.get_attribute('href'):
+                        url = urljoin("https://jobs.rwfm.tamu.edu/", element.get_attribute('href'))
+                    else:
+                        link_elem = element.find_element(By.TAG_NAME, "a")
+                        url = urljoin("https://jobs.rwfm.tamu.edu/", link_elem.get_attribute('href'))
+                except NoSuchElementException:
+                    url = "No URL found"
+
             
             # Extract description/summary
             description = ""

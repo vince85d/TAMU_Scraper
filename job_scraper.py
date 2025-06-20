@@ -201,111 +201,56 @@ class TAMUJobScraper:
         return job_elements
     
     def extract_job_data(self, element):
-        """Extract job data from Selenium WebElement"""
+        """Extract job data by clicking into the job and retrieving its full URL and content"""
         try:
-            # Extract job title - try multiple approaches
-            title = None
-            
-            # Try to find title using various selectors
-            title_selectors = [
-                "h1, h2, h3, h4",
-                "[class*='title']",
-                "[class*='heading']",
-                "[class*='job-title']",
-                "a"
-            ]
-            
-            for selector in title_selectors:
-                try:
-                    title_elem = element.find_element(By.CSS_SELECTOR, selector)
-                    if title_elem and title_elem.text.strip():
-                        title = title_elem.text.strip()
-                        break
-                except NoSuchElementException:
-                    continue
-            
-            # If no title found, use element text or link text
-            if not title:
-                if element.tag_name == 'a':
-                    title = element.text.strip()
-                else:
-                    title = element.text.strip()[:100]  # First 100 chars as fallback
-            
-            if not title or len(title) < 3:
-                return None
-            
-            # Extract job URL — prioritize "Open in new window"
-            url = None
+            # Scroll to element and click it
+            self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
+            time.sleep(0.5)
+            element.click()
+            time.sleep(2)  # Allow modal or new content to load
+    
+            # Switch to new window/tab if opened
+            original_window = self.driver.current_window_handle
+            WebDriverWait(self.driver, 10).until(EC.number_of_windows_to_be(2))
+    
+            for window_handle in self.driver.window_handles:
+                if window_handle != original_window:
+                    self.driver.switch_to.window(window_handle)
+                    break
+    
+            time.sleep(2)
+    
+            # Get full job URL
+            url = self.driver.current_url
+            title = self.driver.title
+    
+            # Get description
             try:
-                links = element.find_elements(By.TAG_NAME, "a")
-                for link in links:
-                    link_text = link.text.strip().lower()
-                    href = link.get_attribute('href')
-                    target = link.get_attribute('target')
-                    # These "open in new window" links usually open in a new tab
-                    if ("open in new window" in link_text or target == "_blank") and href:
-                        url = urljoin("https://jobs.rwfm.tamu.edu/", href)
-                        break
-            except Exception as e:
-                print(f"Error finding 'Open in New Window' link: {e}")
-            
-            # Fallback to first available link if "Open in New Window" wasn't found
+                description_elem = self.driver.find_element(By.TAG_NAME, "body")
+                description = description_elem.text.strip()
+            except:
+                description = ""
+    
+            self.driver.close()
+            self.driver.switch_to.window(original_window)
+    
             if not url:
-                try:
-                    if element.tag_name == 'a' and element.get_attribute('href'):
-                        url = urljoin("https://jobs.rwfm.tamu.edu/", element.get_attribute('href'))
-                    else:
-                        link_elem = element.find_element(By.TAG_NAME, "a")
-                        url = urljoin("https://jobs.rwfm.tamu.edu/", link_elem.get_attribute('href'))
-                except NoSuchElementException:
-                    url = "No URL Found"
-                    print(f"Final job URL: {url}")
-
-
-
-
-            
-            # Extract description/summary
-            description = ""
-            desc_selectors = [
-                "[class*='desc']",
-                "[class*='summary']", 
-                "[class*='content']",
-                "[class*='detail']",
-                "p",
-                "div"
-            ]
-            
-            for selector in desc_selectors:
-                try:
-                    desc_elem = element.find_element(By.CSS_SELECTOR, selector)
-                    if desc_elem and desc_elem.text.strip():
-                        description = desc_elem.text.strip()
-                        break
-                except NoSuchElementException:
-                    continue
-            
-            if not description:
-                description = element.text.strip()
-            
-            # Limit description length
-            if len(description) > 1000:
-                description = description[:1000] + "..."
-            
-            # Create unique ID for job
+                return None
+    
             job_id = f"{title}_{url}".replace(' ', '_').replace('/', '_')[:200]
-            
+    
             return {
                 'id': job_id,
                 'title': title,
                 'url': url,
-                'description': description,
+                'description': description[:1000] + "..." if len(description) > 1000 else description,
                 'scraped_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
-            
+    
         except Exception as e:
-            print(f"Error extracting job data: {str(e)}")
+            print(f"Error extracting job detail view: {e}")
             return None
+
 
     def is_job_recent(self, job_text, days=7):
         """Check if job was posted in the last N days"""

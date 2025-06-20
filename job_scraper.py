@@ -200,75 +200,75 @@ class TAMUJobScraper:
         
         return job_elements
     
-   def extract_job_data(self, element):
-    try:
-        # Scroll the element into view
-        self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
-        time.sleep(0.5)
-
-        # Find the clickable <a> inside the job element
-        clickable_link = element.find_element(By.TAG_NAME, "a")
-        job_url = clickable_link.get_attribute("href")
-
-        if not job_url:
-            # If no href, try clicking the element directly with JS click
-            self.driver.execute_script("arguments[0].click();", element)
-            original_window = self.driver.current_window_handle
-
-            # Wait for a new window/tab or timeout after 10s
-            WebDriverWait(self.driver, 10).until(EC.number_of_windows_to_be(2))
-
-            # Switch to the new window/tab
-            for window_handle in self.driver.window_handles:
-                if window_handle != original_window:
-                    self.driver.switch_to.window(window_handle)
-                    break
-        else:
-            # Open the job URL in a new tab manually
-            original_window = self.driver.current_window_handle
-            self.driver.execute_script("window.open(arguments[0]);", job_url)
-
-            # Wait for the new tab to appear
-            WebDriverWait(self.driver, 10).until(EC.number_of_windows_to_be(2))
-
-            # Switch to the new tab
-            for window_handle in self.driver.window_handles:
-                if window_handle != original_window:
-                    self.driver.switch_to.window(window_handle)
-                    break
-
-        # Wait for page to load
-        time.sleep(2)
-
-        url = self.driver.current_url
-        title = self.driver.title
-
+    def extract_job_data(self, element):
         try:
-            description_elem = self.driver.find_element(By.TAG_NAME, "body")
-            description = description_elem.text.strip()
-        except:
-            description = ""
-
-        # Close the tab and switch back to original window
-        self.driver.close()
-        self.driver.switch_to.window(original_window)
-
-        if not url:
+            # Scroll the element into view
+            self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
+            time.sleep(0.5)
+    
+            # Find the clickable <a> inside the job element
+            clickable_link = element.find_element(By.TAG_NAME, "a")
+            job_url = clickable_link.get_attribute("href")
+    
+            if not job_url:
+                # If no href, try clicking the element directly with JS click
+                self.driver.execute_script("arguments[0].click();", element)
+                original_window = self.driver.current_window_handle
+    
+                # Wait for a new window/tab or timeout after 10s
+                WebDriverWait(self.driver, 10).until(EC.number_of_windows_to_be(2))
+    
+                # Switch to the new window/tab
+                for window_handle in self.driver.window_handles:
+                    if window_handle != original_window:
+                        self.driver.switch_to.window(window_handle)
+                        break
+            else:
+                # Open the job URL in a new tab manually
+                original_window = self.driver.current_window_handle
+                self.driver.execute_script("window.open(arguments[0]);", job_url)
+    
+                # Wait for the new tab to appear
+                WebDriverWait(self.driver, 10).until(EC.number_of_windows_to_be(2))
+    
+                # Switch to the new tab
+                for window_handle in self.driver.window_handles:
+                    if window_handle != original_window:
+                        self.driver.switch_to.window(window_handle)
+                        break
+    
+            # Wait for page to load
+            time.sleep(2)
+    
+            url = self.driver.current_url
+            title = self.driver.title
+    
+            try:
+                description_elem = self.driver.find_element(By.TAG_NAME, "body")
+                description = description_elem.text.strip()
+            except:
+                description = ""
+    
+            # Close the tab and switch back to original window
+            self.driver.close()
+            self.driver.switch_to.window(original_window)
+    
+            if not url:
+                return None
+    
+            job_id = f"{title}_{url}".replace(' ', '_').replace('/', '_')[:200]
+    
+            return {
+                'id': job_id,
+                'title': title,
+                'url': url,
+                'description': description[:1000] + "..." if len(description) > 1000 else description,
+                'scraped_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+    
+        except Exception as e:
+            print(f"Error extracting job detail view: {e}")
             return None
-
-        job_id = f"{title}_{url}".replace(' ', '_').replace('/', '_')[:200]
-
-        return {
-            'id': job_id,
-            'title': title,
-            'url': url,
-            'description': description[:1000] + "..." if len(description) > 1000 else description,
-            'scraped_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-
-    except Exception as e:
-        print(f"Error extracting job detail view: {e}")
-        return None
 
 
 

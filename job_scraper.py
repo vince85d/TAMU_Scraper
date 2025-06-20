@@ -234,20 +234,22 @@ class TAMUJobScraper:
             if not title or len(title) < 3:
                 return None
             
-            # Extract job URL — look for the "Open in new window" link
+            # Extract job URL — prioritize "Open in new window"
             url = None
             try:
                 links = element.find_elements(By.TAG_NAME, "a")
                 for link in links:
                     link_text = link.text.strip().lower()
                     href = link.get_attribute('href')
-                    if "open in new window" in link_text and href:
+                    target = link.get_attribute('target')
+                    # These "open in new window" links usually open in a new tab
+                    if ("open in new window" in link_text or target == "_blank") and href:
                         url = urljoin("https://jobs.rwfm.tamu.edu/", href)
                         break
-            except NoSuchElementException:
-                pass
+            except Exception as e:
+                print(f"Error finding 'Open in New Window' link: {e}")
             
-            # Fallback to first available link if "Open in new window" wasn't found
+            # Fallback to first available link if "Open in New Window" wasn't found
             if not url:
                 try:
                     if element.tag_name == 'a' and element.get_attribute('href'):
@@ -256,7 +258,9 @@ class TAMUJobScraper:
                         link_elem = element.find_element(By.TAG_NAME, "a")
                         url = urljoin("https://jobs.rwfm.tamu.edu/", link_elem.get_attribute('href'))
                 except NoSuchElementException:
-                    url = "No URL found"
+                    url = "print(f"Final job URL: {url}")
+"
+
 
             
             # Extract description/summary

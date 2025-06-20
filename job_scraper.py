@@ -206,50 +206,48 @@ class TAMUJobScraper:
             self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
             time.sleep(0.5)
     
-            # Find the clickable <a> inside the job element
-            clickable_link = element.find_element(By.TAG_NAME, "a")
-            job_url = clickable_link.get_attribute("href")
+            # Try to extract job URL from an <a> tag inside the element
+            try:
+                clickable_link = element.find_element(By.TAG_NAME, "a")
+                job_url = clickable_link.get_attribute("href")
+            except:
+                job_url = None
     
-            if not job_url:
-                # If no href, try clicking the element directly with JS click
-                self.driver.execute_script("arguments[0].click();", element)
-                original_window = self.driver.current_window_handle
+            original_window = self.driver.current_window_handle
     
-                # Wait for a new window/tab or timeout after 10s
-                WebDriverWait(self.driver, 10).until(EC.number_of_windows_to_be(2))
-    
-                # Switch to the new window/tab
-                for window_handle in self.driver.window_handles:
-                    if window_handle != original_window:
-                        self.driver.switch_to.window(window_handle)
-                        break
-            else:
-                # Open the job URL in a new tab manually
-                original_window = self.driver.current_window_handle
+            if job_url:
+                # Open the job link in a new tab
                 self.driver.execute_script("window.open(arguments[0]);", job_url)
-    
-                # Wait for the new tab to appear
                 WebDriverWait(self.driver, 10).until(EC.number_of_windows_to_be(2))
     
                 # Switch to the new tab
-                for window_handle in self.driver.window_handles:
-                    if window_handle != original_window:
-                        self.driver.switch_to.window(window_handle)
+                for handle in self.driver.window_handles:
+                    if handle != original_window:
+                        self.driver.switch_to.window(handle)
+                        break
+            else:
+                # No direct URL found, try clicking the element itself
+                self.driver.execute_script("arguments[0].click();", element)
+                WebDriverWait(self.driver, 10).until(EC.number_of_windows_to_be(2))
+    
+                for handle in self.driver.window_handles:
+                    if handle != original_window:
+                        self.driver.switch_to.window(handle)
                         break
     
-            # Wait for page to load
+            # Let the new page load
             time.sleep(2)
     
             url = self.driver.current_url
-            title = self.driver.title
+            title = self.driver.title.strip()
     
             try:
-                description_elem = self.driver.find_element(By.TAG_NAME, "body")
-                description = description_elem.text.strip()
+                body_elem = self.driver.find_element(By.TAG_NAME, "body")
+                description = body_elem.text.strip()
             except:
                 description = ""
     
-            # Close the tab and switch back to original window
+            # Clean up and go back
             self.driver.close()
             self.driver.switch_to.window(original_window)
     
@@ -269,7 +267,6 @@ class TAMUJobScraper:
         except Exception as e:
             print(f"Error extracting job detail view: {e}")
             return None
-
 
 
     def is_job_recent(self, job_text, days=7):

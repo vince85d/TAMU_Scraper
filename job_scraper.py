@@ -257,7 +257,11 @@ class TAMUJobScraper:
         self.save_sent_jobs()
 
 def main():
-    smtp_port = int(os.environ.get('SMTP_PORT', '587').strip())
+    smtp_port_str = os.environ.get('SMTP_PORT', '').strip()
+    if not smtp_port_str:
+        smtp_port = 587
+    else:
+        smtp_port = int(smtp_port_str)
     email_config = {
         'from_email': os.environ.get('FROM_EMAIL', '').strip(),
         'password': os.environ.get('EMAIL_PASSWORD', '').strip(),

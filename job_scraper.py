@@ -149,43 +149,63 @@ class TAMUJobScraper:
 
     def extract_job_data(self, element):
         try:
-            original_window = self.driver.current_window_handle
-
+            # Scroll the element into view
+            self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
+            time.sleep(0.5)
+    
+            # Try to extract job URL from an <a> tag inside the element
+            job_url = None
             try:
-                link = element.find_element(By.TAG_NAME, "a")
-                job_url = link.get_attribute("href")
+                clickable_link = element.find_element(By.TAG_NAME, "a")
+                job_url = clickable_link.get_attribute("href")
+            except NoSuchElementException:
+                print("No <a> tag found in job element. Will try clicking the whole element.")
+    
+            original_window = self.driver.current_window_handle
+    
+            # Only open the link if it matched keywords
+            if job_url:
                 self.driver.execute_script("window.open(arguments[0]);", job_url)
-            except:
+            else:
                 self.driver.execute_script("arguments[0].click();", element)
-
+    
             WebDriverWait(self.driver, 10).until(EC.number_of_windows_to_be(2))
-
+    
             for handle in self.driver.window_handles:
                 if handle != original_window:
                     self.driver.switch_to.window(handle)
                     break
-
+    
             time.sleep(2)
+    
             url = self.driver.current_url
             title = self.driver.title.strip()
+    
             try:
                 body_elem = self.driver.find_element(By.TAG_NAME, "body")
                 description = body_elem.text.strip()
             except:
                 description = ""
-
+    
+            # Clean up
             self.driver.close()
             self.driver.switch_to.window(original_window)
-
+    
+            if not url:
+                return None
+    
+            job_id = f"{title}_{url}".replace(' ', '_').replace('/', '_')[:200]
+    
             return {
-                'id': f"{title}_{url}".replace(' ', '_').replace('/', '_')[:200],
+                'id': job_id,
                 'title': title,
                 'url': url,
                 'description': description[:1000] + "..." if len(description) > 1000 else description,
                 'scraped_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
+    
         except Exception as e:
-            print(f"Detail extraction error: {e}")
+            print(f"Preview extraction error: {e}")
             return None
 
     def is_job_recent(self, job_text, days=7):

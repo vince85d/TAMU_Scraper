@@ -22,8 +22,8 @@ class TAMUJobScraper:
             "reptile", "amphibian", "herp", "turtle", "toad", "frog", 
             "seal", "island", "whale", "cetacean", "tortoise", 
             "spatial ecology", "predator", "tropical", "hawaii", 
-            "bear", "lion", "snake", "lizard", "alligator", "crocodile", 
-            "marine mammal"
+            "bear", "lion", "snake", "lizard", "alligator", "crocodile", "chainsaw",
+            "marine mammal",
         ]
         self.email_config = email_config
         self.sent_jobs_file = "sent_jobs.json"
@@ -85,7 +85,29 @@ class TAMUJobScraper:
         except Exception as e:
             print(f"Error saving sent jobs: {e}")
     
-    def contains_keywords(self, text):
+    def is_tamu_job_url(self, url):
+        """Check if URL is a valid TAMU job board URL (not external)"""
+        if not url:
+            return False
+        
+        # Convert relative URLs to absolute for checking
+        if not url.startswith('http'):
+            url = urljoin(self.base_url, url)
+        
+        # Must be on the TAMU domain
+        if 'jobs.rwfm.tamu.edu' not in url:
+            return False
+        
+        # Should contain job-related path components
+        job_indicators = ['/job/', '/posting/', '/position/', '/detail/', '/view/']
+        if not any(indicator in url.lower() for indicator in job_indicators):
+            return False
+        
+        # Should not be the main search page
+        if url.endswith('/search/') or url.endswith('/search'):
+            return False
+        
+        return True
         """Check if text contains any of the target keywords"""
         if not text:
             return False, []
@@ -122,44 +144,59 @@ class TAMUJobScraper:
                 job_url = ""
                 
                 # Look for links within this element - try multiple selectors
+                # Only look for internal TAMU job board links
                 link_selectors = [
                     'a[href*="/job/"]',          # Most common pattern
                     'a[href*="/posting/"]',      # Alternative pattern
                     'a[href*="/position/"]',     # Another alternative
-                    'a[href*="view"]',           # Links with "view" text
-                    'a[title*="view"]',          # Links with "view" in title
-                    'a:contains("View")',        # CSS selector for "View" text
-                    'a',                         # Fallback: any link
+                    'a[href*="jobs.rwfm.tamu.edu"]',  # Full TAMU domain links
                 ]
                 
                 link_element = None
+                valid_tamu_url = None
+                
+                # First, try to find links with TAMU job board patterns
                 for selector in link_selectors:
                     try:
-                        if selector == 'a:contains("View")':
-                            # For this selector, we need to find links with "View" text
-                            links = element.find_elements(By.TAG_NAME, "a")
-                            for link in links:
-                                if "view" in link.text.lower() or "details" in link.text.lower():
-                                    link_element = link
-                                    break
-                        else:
-                            potential_links = element.find_elements(By.CSS_SELECTOR, selector)
-                            if potential_links:
-                                link_element = potential_links[0]  # Take the first one
+                        potential_links = element.find_elements(By.CSS_SELECTOR, selector)
+                        for link in potential_links:
+                            href = link.get_attribute('href')
+                            if href and self.is_tamu_job_url(href):
+                                link_element = link
+                                valid_tamu_url = href
                                 break
+                        if link_element:
+                            break
                     except:
                         continue
                 
-                if link_element:
+                # If no specific job URLs found, look for "View" links but validate they're TAMU links
+                if not link_element:
                     try:
-                        job_url = link_element.get_attribute('href')
+                        all_links = element.find_elements(By.TAG_NAME, "a")
+                        for link in all_links:
+                            link_text = link.text.strip().lower()
+                            href = link.get_attribute('href')
+                            
+                            # Look for "View", "Details", "More" links that are TAMU links
+                            if (link_text in ['view', 'details', 'more', 'view job', 'job details'] and 
+                                href and self.is_tamu_job_url(href)):
+                                link_element = link
+                                valid_tamu_url = href
+                                break
+                    except:
+                        pass
+                
+                if link_element and valid_tamu_url:
+                    try:
+                        job_url = valid_tamu_url
                         # Make sure it's a full URL
                         if job_url and not job_url.startswith('http'):
                             job_url = urljoin(self.base_url, job_url)
                         
                         # Try to get title from link text or nearby elements
                         link_text = link_element.text.strip()
-                        if link_text and link_text.lower() not in ['view', 'details', 'more']:
+                        if link_text and link_text.lower() not in ['view', 'details', 'more', 'view job', 'job details']:
                             title = link_text
                         else:
                             # Look for title in parent or sibling elements
@@ -170,6 +207,9 @@ class TAMUJobScraper:
                                 title = lines[0]  # Usually the first line is the title
                     except Exception as e:
                         print(f"Error extracting link details: {e}")
+                else:
+                    # No valid TAMU job URL found
+                    job_url = ""
                 
                 # Extract other job details
                 location = ""
@@ -211,14 +251,17 @@ class TAMUJobScraper:
                     'title': title,
                     'location': location,
                     'compensation': compensation,
-                    'url': job_url or f"{self.base_url}#{title.replace(' ', '-')}",  # Fallback URL
+                    'url': job_url or "",  # Empty string if no valid TAMU URL found
                     'description': job_text,
                     'matching_keywords': matching_keywords,
                     'scraped_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
                 
                 jobs.append(job_data)
-                print(f"Found job: {title[:50]}... with URL: {job_url}")
+                if job_url:
+                    print(f"Found job: {title[:50]}... with TAMU URL: {job_url}")
+                else:
+                    print(f"Found job: {title[:50]}... (no direct TAMU URL found)")
                 
             except Exception as e:
                 print(f"Error processing job element: {e}")

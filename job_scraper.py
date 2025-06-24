@@ -22,8 +22,8 @@ class TAMUJobScraper:
             "reptile", "amphibian", "herp", "turtle", "toad", "frog", 
             "seal", "island", "whale", "cetacean", "tortoise", 
             "spatial ecology", "predator", "tropical", "hawaii", 
-            "bear", "lion", "snake", "lizard", "alligator", "crocodile", "marine mammal", 
-          
+            "bear", "lion", "snake", "lizard", "alligator", "crocodile", 
+            "marine mammal"
         ]
         self.email_config = email_config
         self.sent_jobs_file = "sent_jobs.json"
@@ -42,7 +42,6 @@ class TAMUJobScraper:
         chrome_options.add_argument('--window-size=1920,1080')
         chrome_options.add_argument('--disable-extensions')
         chrome_options.add_argument('--disable-plugins')
-        # Removed --disable-images and --disable-javascript as they might break the site
         chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
         
         # Additional options for stability
@@ -100,58 +99,137 @@ class TAMUJobScraper:
         
         return len(matching_keywords) > 0, matching_keywords
     
-    def extract_job_from_text_block(self, text_block, page_url):
-        """Extract job information from a text block"""
-        try:
-            lines = [line.strip() for line in text_block.split('\n') if line.strip()]
-            if len(lines) < 3:  # Too short to be a real job posting
-                return None
-            
-            # The first substantial line is usually the title
-            title = lines[0] if lines else "Unknown Position"
-            
-            # Look for location information
-            location = ""
-            for line in lines[1:5]:  # Check first few lines for location
-                if any(loc_word in line.lower() for loc_word in ['location', 'city', 'state', 'position:']):
-                    location = line
-                    break
-            
-            # Look for salary/compensation info
-            compensation = ""
-            for line in lines:
-                if any(comp_word in line.lower() for comp_word in ['salary', 'compensation', 'range:', '$']):
-                    compensation = line
-                    break
-            
-            # Create description from all text
-            description = text_block
-            
-            # Try to create a unique URL for this job
-            # Since we don't have individual job URLs, create one based on title and current page
-            job_url = f"{page_url}#{title.replace(' ', '-').replace('/', '-')}"
-            
-            # Create unique job ID
-            job_id = f"{title}_{job_url}".replace(' ', '_').replace('/', '_')[:200]
-            
-            return {
-                'id': job_id,
-                'title': title,
-                'location': location,
-                'compensation': compensation,
-                'url': job_url,
-                'description': description,
-                'scraped_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            }
-            
-        except Exception as e:
-            print(f"Error extracting job from text block: {e}")
-            return None
+    def extract_job_details_from_elements(self, job_elements):
+        """Extract job information from DOM elements and find the real job URLs"""
+        jobs = []
+        
+        for element in job_elements:
+            try:
+                # Get all text from this element
+                job_text = element.text.strip()
+                
+                if len(job_text) < 50:  # Skip if too short
+                    continue
+                
+                # Check if this job matches our keywords
+                has_keywords, matching_keywords = self.contains_keywords(job_text)
+                
+                if not has_keywords:
+                    continue
+                
+                # Try to find the job title and URL
+                title = "Unknown Position"
+                job_url = ""
+                
+                # Look for links within this element - try multiple selectors
+                link_selectors = [
+                    'a[href*="/job/"]',          # Most common pattern
+                    'a[href*="/posting/"]',      # Alternative pattern
+                    'a[href*="/position/"]',     # Another alternative
+                    'a[href*="view"]',           # Links with "view" text
+                    'a[title*="view"]',          # Links with "view" in title
+                    'a:contains("View")',        # CSS selector for "View" text
+                    'a',                         # Fallback: any link
+                ]
+                
+                link_element = None
+                for selector in link_selectors:
+                    try:
+                        if selector == 'a:contains("View")':
+                            # For this selector, we need to find links with "View" text
+                            links = element.find_elements(By.TAG_NAME, "a")
+                            for link in links:
+                                if "view" in link.text.lower() or "details" in link.text.lower():
+                                    link_element = link
+                                    break
+                        else:
+                            potential_links = element.find_elements(By.CSS_SELECTOR, selector)
+                            if potential_links:
+                                link_element = potential_links[0]  # Take the first one
+                                break
+                    except:
+                        continue
+                
+                if link_element:
+                    try:
+                        job_url = link_element.get_attribute('href')
+                        # Make sure it's a full URL
+                        if job_url and not job_url.startswith('http'):
+                            job_url = urljoin(self.base_url, job_url)
+                        
+                        # Try to get title from link text or nearby elements
+                        link_text = link_element.text.strip()
+                        if link_text and link_text.lower() not in ['view', 'details', 'more']:
+                            title = link_text
+                        else:
+                            # Look for title in parent or sibling elements
+                            parent = link_element.find_element(By.XPATH, '..')
+                            parent_text = parent.text.strip()
+                            lines = [line.strip() for line in parent_text.split('\n') if line.strip()]
+                            if lines:
+                                title = lines[0]  # Usually the first line is the title
+                    except Exception as e:
+                        print(f"Error extracting link details: {e}")
+                
+                # Extract other job details
+                location = ""
+                compensation = ""
+                
+                # Look for location patterns
+                location_patterns = [
+                    r'Location:?\s*([^\n]+)',
+                    r'Position Location:?\s*([^\n]+)',
+                    r'City:?\s*([^\n]+)',
+                    r'([A-Z][a-z]+,\s*[A-Z]{2})',  # City, State format
+                ]
+                
+                for pattern in location_patterns:
+                    match = re.search(pattern, job_text, re.IGNORECASE)
+                    if match:
+                        location = match.group(1).strip()
+                        break
+                
+                # Look for compensation patterns
+                comp_patterns = [
+                    r'Salary:?\s*([^\n]+)',
+                    r'Compensation:?\s*([^\n]+)',
+                    r'Pay:?\s*([^\n]+)',
+                    r'\$[\d,]+(?:\.\d{2})?(?:\s*-\s*\$[\d,]+(?:\.\d{2})?)?',
+                ]
+                
+                for pattern in comp_patterns:
+                    match = re.search(pattern, job_text, re.IGNORECASE)
+                    if match:
+                        compensation = match.group(0).strip()
+                        break
+                
+                # Create unique job ID
+                job_id = f"{title}_{job_url}".replace(' ', '_').replace('/', '_')[:200]
+                
+                job_data = {
+                    'id': job_id,
+                    'title': title,
+                    'location': location,
+                    'compensation': compensation,
+                    'url': job_url or f"{self.base_url}#{title.replace(' ', '-')}",  # Fallback URL
+                    'description': job_text,
+                    'matching_keywords': matching_keywords,
+                    'scraped_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
+                
+                jobs.append(job_data)
+                print(f"Found job: {title[:50]}... with URL: {job_url}")
+                
+            except Exception as e:
+                print(f"Error processing job element: {e}")
+                continue
+        
+        return jobs
     
     def scrape_jobs(self):
         jobs = []
         page_num = 1
-        max_pages = 5  # Reduced since we're doing more thorough processing
+        max_pages = 5
         
         try:
             self.setup_driver()
@@ -171,41 +249,66 @@ class TAMUJobScraper:
                     # Wait for content to load
                     time.sleep(5)
                     
-                    # Get the full page text
-                    page_text = self.driver.find_element(By.TAG_NAME, "body").text
+                    # Try multiple strategies to find job elements
+                    job_elements = []
                     
-                    # Print some debug info
-                    print(f"Page {page_num} loaded. Text length: {len(page_text)}")
-                    print(f"First 500 characters: {page_text[:500]}...")
+                    # Strategy 1: Look for common job listing containers
+                    job_selectors = [
+                        'div[class*="job"]',
+                        'div[class*="listing"]',
+                        'div[class*="posting"]',
+                        'div[class*="position"]',
+                        'tr[class*="job"]',        # Table rows
+                        'tr[class*="listing"]',
+                        'li[class*="job"]',        # List items
+                        '.job-item',
+                        '.listing-item',
+                        '.position-item',
+                        'article',
+                        '[data-job-id]',           # Elements with job ID data attributes
+                    ]
                     
-                    # Try multiple strategies to find job content
-                    job_blocks = self.extract_job_blocks_from_page(page_text)
+                    for selector in job_selectors:
+                        try:
+                            elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                            if elements:
+                                job_elements = elements
+                                print(f"Found {len(elements)} job elements using selector: {selector}")
+                                break
+                        except Exception as e:
+                            continue
                     
-                    if not job_blocks:
-                        print(f"No job blocks found on page {page_num}. Trying alternative extraction...")
-                        job_blocks = self.extract_jobs_alternative_method()
+                    # Strategy 2: If no specific job containers found, look for elements containing links
+                    if not job_elements:
+                        print("No job containers found, looking for elements with job links...")
+                        try:
+                            # Find all elements that contain links with job-like URLs
+                            all_elements = self.driver.find_elements(By.XPATH, "//div[.//a[contains(@href, 'job') or contains(@href, 'position') or contains(@href, 'posting')]]")
+                            job_elements = all_elements
+                            print(f"Found {len(job_elements)} elements with job links")
+                        except Exception as e:
+                            print(f"Error finding elements with job links: {e}")
                     
-                    if not job_blocks:
-                        print(f"No jobs found on page {page_num}. Stopping pagination.")
+                    # Strategy 3: Fallback - find any substantial div elements
+                    if not job_elements:
+                        print("Using fallback strategy...")
+                        all_divs = self.driver.find_elements(By.TAG_NAME, "div")
+                        job_elements = [div for div in all_divs if len(div.text.strip()) > 100]
+                        print(f"Fallback found {len(job_elements)} substantial div elements")
+                    
+                    if not job_elements:
+                        print(f"No job elements found on page {page_num}")
                         break
                     
-                    print(f"Found {len(job_blocks)} potential job blocks on page {page_num}")
+                    # Extract job details
+                    page_jobs = self.extract_job_details_from_elements(job_elements)
+                    jobs.extend(page_jobs)
                     
-                    for i, job_block in enumerate(job_blocks):
-                        try:
-                            # Check if this block contains keywords first
-                            has_keywords, matching_keywords = self.contains_keywords(job_block)
-                            
-                            if has_keywords:
-                                job_data = self.extract_job_from_text_block(job_block, url)
-                                if job_data:
-                                    job_data['matching_keywords'] = matching_keywords
-                                    jobs.append(job_data)
-                                    print(f"Job {i+1} matches keywords: {job_data['title'][:50]}... (Keywords: {', '.join(matching_keywords)})")
-                            
-                        except Exception as e:
-                            print(f"Error processing job block {i+1}: {e}")
-                            continue
+                    print(f"Page {page_num}: Found {len(page_jobs)} matching jobs")
+                    
+                    if not page_jobs:
+                        print("No matching jobs found, stopping pagination")
+                        break
                     
                     page_num += 1
                     
@@ -219,131 +322,8 @@ class TAMUJobScraper:
         finally:
             self.cleanup_driver()
         
-        print(f"Found {len(jobs)} jobs matching keywords across all pages")
+        print(f"Total: Found {len(jobs)} jobs matching keywords across all pages")
         return jobs
-    
-    def extract_job_blocks_from_page(self, page_text):
-        """Extract individual job blocks from page text using various strategies"""
-        job_blocks = []
-        
-        # Strategy 1: Split by common job posting patterns
-        # Look for patterns that typically start job postings
-        job_patterns = [
-            r'\n([A-Z][^.\n]{10,100})\n(?=Location:|Position:|Reports to:|Compensation:|Summary:)',
-            r'\n([^.\n]{20,100})\n(?=Location of Position:|Job Summary:|Essential Functions:)',
-            r'\n\n([A-Z][^.\n]{15,80})\n[A-Z][^.\n]{10,50}:',
-        ]
-        
-        for pattern in job_patterns:
-            matches = re.finditer(pattern, page_text, re.MULTILINE)
-            for match in matches:
-                start_pos = match.start()
-                # Find the end of this job posting (next job or end of text)
-                next_match = re.search(pattern, page_text[start_pos + 100:])
-                if next_match:
-                    end_pos = start_pos + 100 + next_match.start()
-                else:
-                    end_pos = len(page_text)
-                
-                job_block = page_text[start_pos:end_pos].strip()
-                if len(job_block) > 500:  # Only include substantial blocks
-                    job_blocks.append(job_block)
-        
-        # Strategy 2: Split by multiple newlines (common separator)
-        if not job_blocks:
-            potential_blocks = re.split(r'\n\s*\n\s*\n', page_text)
-            for block in potential_blocks:
-                block = block.strip()
-                if len(block) > 300 and any(keyword in block.lower() for keyword in 
-                    ['position', 'job', 'location', 'salary', 'experience', 'duties', 'responsibilities']):
-                    job_blocks.append(block)
-        
-        return job_blocks
-    
-    def extract_jobs_alternative_method(self):
-        """Alternative method using DOM elements"""
-        job_blocks = []
-        
-        try:
-            # Try to find specific elements that might contain jobs
-            potential_selectors = [
-                'div[class*="job"]',
-                'div[class*="listing"]', 
-                'div[class*="post"]',
-                'article',
-                'section',
-                '.content',
-                '#content',
-                'main',
-                '.main-content'
-            ]
-            
-            for selector in potential_selectors:
-                try:
-                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    for element in elements:
-                        text = element.text.strip()
-                        if len(text) > 300:  # Substantial content
-                            job_blocks.append(text)
-                    
-                    if job_blocks:
-                        print(f"Found job blocks using selector: {selector}")
-                        break
-                        
-                except Exception as e:
-                    continue
-            
-            # If still no luck, get all paragraph-like elements
-            if not job_blocks:
-                try:
-                    all_divs = self.driver.find_elements(By.TAG_NAME, "div")
-                    for div in all_divs:
-                        text = div.text.strip()
-                        if (len(text) > 500 and 
-                            any(keyword in text.lower() for keyword in ['position', 'location', 'responsibilities', 'qualifications'])):
-                            job_blocks.append(text)
-                except Exception as e:
-                    print(f"Error in alternative extraction: {e}")
-            
-        except Exception as e:
-            print(f"Error in alternative job extraction: {e}")
-        
-        return job_blocks
-    
-    def is_job_recent(self, job_text, days=7):
-        """Check if job was posted in the last N days"""
-        # Look for various date patterns
-        date_patterns = [
-            r'Published:(\d{2}/\d{2}/\d{4})',
-            r'Posted:(\d{2}/\d{2}/\d{4})',
-            r'Date Posted:(\d{2}/\d{2}/\d{4})',
-            r'(\d{1,2}/\d{1,2}/\d{4})',
-            r'(\d{4}-\d{2}-\d{2})'
-        ]
-        
-        for pattern in date_patterns:
-            date_match = re.search(pattern, job_text)
-            if date_match:
-                try:
-                    date_str = date_match.group(1)
-                    if '/' in date_str:
-                        job_date = datetime.strptime(date_str, '%m/%d/%Y')
-                    else:
-                        job_date = datetime.strptime(date_str, '%Y-%m-%d')
-                    
-                    cutoff_date = datetime.now() - timedelta(days=days)
-                    return job_date >= cutoff_date
-                except ValueError:
-                    continue
-        
-        # Look for "X days ago"
-        days_ago_match = re.search(r'(\d+)\s+days?\s+ago', job_text, re.IGNORECASE)
-        if days_ago_match:
-            days_ago = int(days_ago_match.group(1))
-            return days_ago <= days
-    
-        # If no date found, include it (better safe than sorry)
-        return True
     
     def send_email(self, jobs):
         """Send email with job listings"""
@@ -403,6 +383,7 @@ class TAMUJobScraper:
                 .keywords {{ background-color: #e6f3ff; padding: 10px; margin-top: 15px; font-size: 12px; border-radius: 5px; }}
                 .date {{ color: #999; font-size: 11px; margin-top: 10px; }}
                 h2 {{ color: #500000; }}
+                .url-note {{ color: #666; font-size: 12px; font-style: italic; }}
             </style>
         </head>
         <body>
@@ -414,6 +395,11 @@ class TAMUJobScraper:
             # Use stored matching keywords if available
             matching_keywords = job.get('matching_keywords', [])
             
+            # Check if we have a real job URL or a fallback
+            url_note = ""
+            if job['url'].startswith(self.base_url) and '#' in job['url']:
+                url_note = '<div class="url-note">⚠️ Direct job link not found - this links to the main job search page</div>'
+            
             html += f"""
             <div class="job">
                 <div class="title">{i}. {job['title']}</div>
@@ -422,6 +408,7 @@ class TAMUJobScraper:
                     {f'<div class="compensation">💰 {job["compensation"]}</div>' if job.get('compensation') else ''}
                 </div>
                 <div><a href="{job['url']}" class="url">🔗 View Full Job Details</a></div>
+                {url_note}
                 <div class="description">
                     <strong>Job Description:</strong><br>
                     {job['description'][:500]}{'...' if len(job['description']) > 500 else ''}
@@ -510,4 +497,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

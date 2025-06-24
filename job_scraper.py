@@ -23,7 +23,7 @@ class TAMUJobScraper:
             "seal", "island", "whale", "cetacean", "tortoise", 
             "spatial ecology", "predator", "tropical", "hawaii", 
             "bear", "lion", "snake", "lizard", "alligator", "crocodile", "chainsaw",
-            "marine mammal",
+            "marine mammal"
         ]
         self.email_config = email_config
         self.sent_jobs_file = "sent_jobs.json"
@@ -108,6 +108,8 @@ class TAMUJobScraper:
             return False
         
         return True
+    
+    def contains_keywords(self, text):
         """Check if text contains any of the target keywords"""
         if not text:
             return False, []

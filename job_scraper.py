@@ -22,7 +22,7 @@ class TAMUJobScraper:
             "reptile", "amphibian", "herp", "turtle", "toad", "frog", 
             "seal", "island", "whale", "cetacean", "tortoise", 
             "spatial ecology", "predator", "tropical", "hawaii", 
-            "bear", "lion", "snake", "lizard", "alligator", "crocodile", "chainsaw"
+            "bear", "lion", "snake", "lizard", "alligator", "crocodile",
         ]
         self.email_config = email_config
         self.sent_jobs_file = "sent_jobs.json"
